@@ -5,7 +5,9 @@ on:
   push:
     paths: ["jobs/fetch.txt"]
   schedule:
-    - cron: "5 15 * * *"   # 台北 23:05
+    - cron: "5 15 * * *"   # 台北 23:05（GitHub 排程常延遲，多排幾個時點；concurrency 讓它們依序接續）
+    - cron: "5 17 * * *"   # 台北 01:05
+    - cron: "5 19 * * *"   # 台北 03:05
   workflow_dispatch:
 concurrency: { group: fetch-raw, cancel-in-progress: false }
 permissions: { contents: write }
