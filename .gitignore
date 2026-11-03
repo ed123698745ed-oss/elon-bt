@@ -1,0 +1,6 @@
+__pycache__/
+*.parquet
+*.pkl
+raw/
+out/
+.env
