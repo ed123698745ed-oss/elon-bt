@@ -1,0 +1,48 @@
+name: fetch-raw
+# 原始資料下載（可續傳）。進度存在 Release「raw-progress」。
+# FinMind 只在台北時間 23:00～07:00 下載，避開 Emit 白天與 21:15～22:45 的排程用量。
+on:
+  push:
+    paths: ["jobs/fetch.txt"]
+  schedule:
+    - cron: "5 15 * * *"   # 台北 23:05
+  workflow_dispatch:
+concurrency: { group: fetch-raw, cancel-in-progress: false }
+permissions: { contents: write }
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      FINMIND_TOKEN_1: ${{ secrets.FINMIND_TOKEN_1 }}
+      FINMIND_TOKEN_2: ${{ secrets.FINMIND_TOKEN_2 }}
+      FINMIND_TOKEN_3: ${{ secrets.FINMIND_TOKEN_3 }}
+      FINMIND_TOKEN_4: ${{ secrets.FINMIND_TOKEN_4 }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: restore progress
+        run: |
+          gh release view raw-progress >/dev/null 2>&1 || gh release create raw-progress --title raw-progress --notes "原始資料下載進度（自動更新）" --prerelease
+          gh release download raw-progress -p raw-progress.tar.gz || true
+          [ -f raw-progress.tar.gz ] && tar xzf raw-progress.tar.gz || mkdir -p raw
+          ls raw || true
+      - name: official
+        run: python data_layer/fetch_official.py
+      - name: finmind (night window only)
+        run: |
+          H=$(TZ=Asia/Taipei date +%H)
+          if [ "$H" -ge 23 ] || [ "$H" -lt 7 ]; then
+            M=$(( ( (7 - 10#$H + 24) % 24 ) * 60 - 20 )); [ $M -gt 300 ] && M=300
+            BUDGET_MIN=$M python data_layer/fetch_finmind.py
+          else
+            echo "outside 23:00-07:00 Taipei, skip FinMind"
+          fi
+      - name: save progress
+        if: always()
+        run: |
+          echo "{\"run\":\"$GITHUB_RUN_ID\",\"at\":\"$(date -u +%FT%TZ)\"}" > raw/_last_run.json
+          tar czf raw-progress.tar.gz raw
+          sha256sum raw-progress.tar.gz | tee raw-progress.sha256
+          gh release upload raw-progress raw-progress.tar.gz raw-progress.sha256 raw/_attempts_official.csv --clobber
+          [ -f raw/_status_finmind.json ] && gh release upload raw-progress raw/_status_finmind.json raw/_attempts_finmind.csv --clobber || true
