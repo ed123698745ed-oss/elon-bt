@@ -105,12 +105,85 @@ def test_split_freeze_and_tamper():
     assert sp.label(cal.days[200]) == "IS" and sp.label(cal.days[201]) == "GAP" and sp.label(cal.days[270]) == "OOS"
 
 
+BT_PATH = os.environ.get("BT_STATS_PATH", "/home/claude/vendor/bt_stats_v1.0.py")
+need_bt = pytest.mark.skipif(not os.path.exists(BT_PATH), reason="需要 Drive 原版 bt_stats（設 BT_STATS_PATH）")
+
+
+@need_bt
+def test_r14_float_residual_not_counted_as_win():
+    """退回-14：浮點殘值（±1e-16）被算成勝負。經 bt_stats 視為 0，不算勝。"""
+    from framework import stats
+    bt = stats.load(BT_PATH)
+    r = [0.01, -0.01, 1e-16, -1e-16, 0.02]
+    naive = sum(x > 0 for x in r) / len(r)
+    s = bt.summarize(r)
+    assert naive == pytest.approx(0.6) and s["勝率"] == pytest.approx(0.4)
+
+
+def test_r04_one_price_limit_up_not_filled():
+    """退回-04：一價鎖漲停仍以開盤價成交。"""
+    from framework.market import judge_fill
+    bar = dict(open=11.0, high=11.0, low=11.0, close=11.0, volume=50, limit_up=11.0, limit_down=9.0)
+    f = judge_fill(bar, "long", "entry", "open")
+    assert not f.ok and "一價鎖漲停" in f.reason
+    assert judge_fill(bar, "short", "entry", "open").ok          # 賣方可成交，多空分開判定
+    bar2 = dict(bar, low=10.5)
+    f2 = judge_fill(bar2, "long", "entry", "open")
+    assert f2.ok and "排隊未驗證" in f2.warn
+    assert not judge_fill(dict(bar, volume=0), "long", "entry", "open").ok
+    assert not judge_fill(None, "long", "exit", "close").ok
+
+
+def test_r57_universe_uses_status_on_date():
+    """退回-57（合成資料）：興櫃段不得進母體；下市前仍在母體。"""
+    from framework.market import universe_on
+    rows = [dict(stock_id="2897", status="興櫃", start_date="2008-12-01", end_date="2017-05-08", verified=True),
+            dict(stock_id="2897", status="上市", start_date="2017-05-09", end_date=None, verified=True),
+            dict(stock_id=1234, status="上櫃", start_date="2005-01-03", end_date="2012-06-30", verified=True),
+            dict(stock_id="9999", status="上市", start_date="2000-01-01", end_date=None, verified=False)]
+    assert universe_on(rows, "2010-01-04") == ["1234"]
+    assert universe_on(rows, "2018-01-02") == ["2897"]
+    assert "9999" in universe_on(rows, "2018-01-02", include_unverified=True)
+
+
+@need_bt
+def test_precheck_end_to_end():
+    """退回-55／11／58 與框架章：交件前檢查要擋下。"""
+    import pandas as pd
+    from framework import stats
+    from framework.ledger import trade_row
+    from checks.precheck import run
+    stats.load(BT_PATH)
+    cal = weekday_cal(n=500)
+    sp = Split(cal.days[200], cal.days[270])
+    rows = []
+    for i, (sym, a, b, h) in enumerate([("2330", 5, 9, "h1"), ("2317", 5, 9, "h2"), ("2454", 9, 14, "h1"), ("2330", 9, 12, "h3")]):
+        rows.append(trade_row(cal, sp, trade_id=i, combo="H5", is_etest=False, symbol=sym, direction="long",
+                              info_time=f"{cal.days[a-1]} 14:30", entry_time=f"{cal.days[a]} 09:00",
+                              entry_date=cal.days[a], entry_session="open", entry_px=100,
+                              exit_date=cal.days[b], exit_session="close", exit_px=101 + i, actions=[],
+                              cluster=str(cal.days[a]), price_series_hash=h))
+    df = pd.DataFrame(rows)
+    df["symbol"] = df["symbol"].astype(object); df.loc[1, "symbol"] = 2317   # 代號變數字
+    res = run(df, report_text="①…②…③… 時點未違反")
+    fails = {item for lvl, item, _ in res if lvl == "FAIL"}
+    warns = {item for lvl, item, _ in res if lvl == "WARN"}
+    assert "價格序列不重複對到不同代號" in fails                # h1 對到 2330 與 2454
+    assert "同股同參數持倉不重疊" in fails                       # 2330 第 9 日收盤出、第 9 日開盤進
+    assert "代號欄為文字格式" in fails
+    assert "斷言字眼須附證據位置" in warns
+    df2 = df.copy(); df2.loc[0, "ret"] = 0.5; df2.loc[0, "ret_by"] = "hand"
+    fails2 = {item for lvl, item, _ in run(df2) if lvl == "FAIL"}
+    assert "持有日與報酬由框架計算" in fails2
+
+
 PENDING = {
-    "退回-14": "015 浮點殘值算成勝負：需 bt_stats 原檔（Drive 載入）",
-    "退回-04": "003 一價鎖漲停仍以開盤成交：DATA（日K＋成交判定）",
-    "退回-52": "038 買回期間晚於公告：DATA（事件期間攔截）",
-    "退回-55": "055 兩事件同一價格序列：DATA（序列重複檢查）",
-    "退回-57": "040 王道銀興櫃段殘留：DATA（市場別表）",
+    "退回-52": "038 買回期間晚於公告：DATA（事件期間攔截，待事件表）",
+    "退回-57": "040 王道銀興櫃段殘留：真實資料版待市場別表（合成版已測）",
+    "退回-13": "1512 瑞利真實資料版待日K與減資表（合成版已測）",
+    "退回-38": "陞泰真實資料版待公司行動表（合成版已測）",
+    "退回-04": "003 真實資料版待日K與官方漲跌停（合成版已測）",
+    "退回-55": "055 美股 GGP／GM 不在台股資料層；以價格序列雜湊檢查覆蓋（合成版已測）",
 }
 
 
