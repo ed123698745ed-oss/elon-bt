@@ -23,6 +23,7 @@ import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from framework.elon_tools import limit_prices  # noqa: E402
+from data_layer import corp_actions  # noqa: E402
 
 RAW = os.environ.get("RAW_DIR", "raw")
 OUT = os.environ.get("OUT_DIR", "out")
@@ -121,7 +122,8 @@ def official_exright() -> pd.DataFrame:
     rows, empty = [], []
     pick = {"date": ("資料日期", "除權息日期"), "stock_id": ("股票代號", "代號"), "prev_close": ("除權息前收盤價",),
             "ref": ("除權息參考價",), "limit_up": ("漲停價格", "漲停價"), "limit_down": ("跌停價格", "跌停價"),
-            "kind": ("權/息",), "cash": ("現金股利",), "stock_per_k": ("每仟股無償配股",)}
+            "kind": ("權/息",), "cash": ("現金股利",), "stock_per_k": ("每仟股無償配股",),
+            "wv": ("權值+息值",), "rights_sh": ("現金增資股數",)}
     def take(fields, r):
         out = {}
         for k, names in pick.items():
@@ -140,7 +142,9 @@ def official_exright() -> pd.DataFrame:
                     rows.append(dict(date=roc(x["date"]), stock_id=str(x["stock_id"]).strip(), prev_close=num(x["prev_close"]),
                                      ref=num(x["ref"]), limit_up=num(x["limit_up"]), limit_down=num(x["limit_down"]),
                                      kind=str(x["kind"] or "").strip(), cash=num(x["cash"]) if x["cash"] is not None else None,
-                                     stock_per_k=num(x["stock_per_k"]) if x["stock_per_k"] is not None else None, src=src))
+                                     stock_per_k=num(x["stock_per_k"]) if x["stock_per_k"] is not None else None,
+                                     wv=num(x["wv"]) if x["wv"] is not None else None,
+                                     rights_sh=num(x["rights_sh"]) if x["rights_sh"] is not None else None, src=src))
                     n += 1
             if n == 0:
                 empty.append(os.path.basename(os.path.dirname(f)) + "/" + os.path.basename(f))
@@ -164,7 +168,7 @@ def load_prices() -> pd.DataFrame:
     return px[["date", "stock_id", "open", "high", "low", "close", "volume", "amount"]].sort_values(["stock_id", "date"])
 
 
-def build_daily(px: pd.DataFrame, st: pd.DataFrame, ex: pd.DataFrame) -> pd.DataFrame:
+def build_daily(px: pd.DataFrame, st: pd.DataFrame, ex: pd.DataFrame, ca: pd.DataFrame | None = None) -> pd.DataFrame:
     n0 = len(px)
     start = st.set_index("stock_id")["start_date"]
     s = px["stock_id"].map(start)
@@ -198,6 +202,8 @@ def build_daily(px: pd.DataFrame, st: pd.DataFrame, ex: pd.DataFrame) -> pd.Data
     # 跳動掃描：收盤超出漲跌停且「前一成交日之後到當日（含）」查無公司行動（含休市日除權息）
     px["prev_date"] = px["date"].where(~px["no_trade"]).groupby(px["stock_id"]).transform(lambda c: c.ffill().shift(1))
     exk = ex[["stock_id", "date"]].copy()
+    if ca is not None and len(ca):
+        exk = pd.concat([exk, ca[["stock_id", "ex_date"]].rename(columns={"ex_date": "date"})], ignore_index=True)
     tol = 1e-9
     out_of_band = ~px["no_trade"] & px["prev_close"].notna() & ((px["close"] > px["limit_up"] + tol) | (px["close"] < px["limit_down"] - tol))
     cand = px[out_of_band][["stock_id", "date", "prev_date"]]
@@ -209,7 +215,7 @@ def build_daily(px: pd.DataFrame, st: pd.DataFrame, ex: pd.DataFrame) -> pd.Data
     jumps["jump_flag"] = True
     px = px.merge(jumps, on=["stock_id", "date"], how="left")
     px["jump_flag"] = px["jump_flag"].fillna(False).astype(bool)
-    px["jump_reason"] = px["jump_flag"].map({True: "超出漲跌停且查無官方除權息（減資等待公司行動表核對）", False: None})
+    px["jump_reason"] = px["jump_flag"].map({True: "超出漲跌停且查無公司行動", False: None})
     LOG["daily_k"].update(rows=len(px), official_limit_rows=int((px["limit_src"] == "官方除權息表").sum()),
                           jump_rows=int(px["jump_flag"].sum()), unverified_rows=int((~px["status_verified"]).sum()))
     return px.drop(columns=["ref_off", "up_off", "dn_off", "prev_date"])
@@ -229,9 +235,11 @@ def main():
     st = build_status()
     ex = official_exright()
     cal = build_calendar(px)
-    dk = build_daily(px, st, ex)
+    ca = corp_actions.build(ex, LOG)
+    dk = build_daily(px, st, ex, ca)
     dk["stock_id"] = dk["stock_id"].astype(str)
-    files = {"calendar.parquet": cal, "status.parquet": st, "daily_k.parquet": dk, "official_exright.parquet": ex}
+    files = {"calendar.parquet": cal, "status.parquet": st, "daily_k.parquet": dk, "official_exright.parquet": ex,
+             "corp_actions.parquet": ca}
     man = {"built_at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "raw_dir": RAW, "files": {}}
     for name, df in files.items():
         p = os.path.join(OUT, name)

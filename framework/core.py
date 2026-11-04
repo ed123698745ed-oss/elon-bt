@@ -203,3 +203,24 @@ def overlaps(trades) -> list:
             if (_d(q[2]), order[q[3]]) <= (_d(p[4]), order[p[5]]):
                 bad.append((p, q))
     return bad
+
+
+def actions_from_table(ca_rows, stock_id) -> list:
+    """由 corp_actions.parquet（DataFrame 或 dict 列）取出某股的公司行動。
+
+    資料不足（share_ratio 或 cash 為空）的行動仍回傳，Action.kind 加註「資料不足」，
+    由 framework.ledger.trade_row 判定：持有期間碰到即排除該筆並寫原因，不推估。
+    """
+    sid = norm_id(stock_id)
+    rows = ca_rows[ca_rows["stock_id"] == sid].to_dict("records") if hasattr(ca_rows, "to_dict") else \
+        [r for r in ca_rows if norm_id(r["stock_id"]) == sid]
+    out = []
+    for r in rows:
+        bad = r.get("share_ratio") is None or r.get("cash") is None or \
+            (isinstance(r.get("share_ratio"), float) and r["share_ratio"] != r["share_ratio"]) or \
+            (isinstance(r.get("cash"), float) and r["cash"] != r["cash"])
+        out.append(Action(_d(r["ex_date"]), r["kind"] + ("｜資料不足" if bad else ""),
+                          share_ratio=1.0 if bad else float(r["share_ratio"]), cash=0.0 if bad else float(r["cash"]),
+                          cash_date=_d(r["cash_date"]) if isinstance(r.get("cash_date"), str) and r["cash_date"][:4].isdigit() else None,
+                          source=str(r.get("source") or "")))
+    return out

@@ -31,6 +31,12 @@ def trade_row(cal: Calendar, split: Split | None, *, trade_id, combo, is_etest, 
                sample=split.label(entry_date) if split else None,
                ret_by=None, hold_by=None, ret_flags=None)
     row["sample"] = {"IS": "樣本內", "OOS": "樣本外", "GAP": "隔離帶", None: None}[row["sample"]]
+    if not excluded_reason and exit_date:
+        a, b = _d(entry_date), _d(exit_date)
+        bad = [x for x in actions if "資料不足" in x.kind and a < _d(x.ex_date) <= b]
+        if bad:
+            excluded_reason = "持有期間公司行動資料不足：" + "、".join(f"{x.ex_date}{x.kind}" for x in bad)
+            row["excluded_reason"] = excluded_reason
     if not excluded_reason:
         tr = trade_return(direction, entry_px, exit_px, entry_date, exit_date, actions)
         row.update(ret=tr.ret, ret_by=RET_STAMP, hold_days=cal.hold_days(entry_date, exit_date),
