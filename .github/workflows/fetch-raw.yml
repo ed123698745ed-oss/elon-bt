@@ -1,6 +1,6 @@
 name: fetch-raw
 # 原始資料下載（可續傳）。進度存在 Release「raw-progress」。
-# FinMind 全天下載（Ed 2026-11-04 同意）。
+# FinMind 只在台北 17:00～隔日 08:00 下載（Ed 2026-11-04 10:05）。
 on:
   push:
     paths: ["jobs/fetch.txt"]
@@ -30,8 +30,8 @@ jobs:
       - name: official
         run: python data_layer/fetch_official.py
       - name: finmind
-        # Ed 2026-11-04 08:04：token 白天沒在用，可全天下載；額度用完時程式自動冷卻等待
-        run: BUDGET_MIN=320 python data_layer/fetch_finmind.py
+        # Ed 2026-11-04 10:05：白天暫停，台北 17:00～隔日 08:00 下載；超出時段程式自動停止並存進度
+        run: ALLOW_HOURS=17-8 BUDGET_MIN=320 python data_layer/fetch_finmind.py
       - name: save progress
         if: always()
         run: |

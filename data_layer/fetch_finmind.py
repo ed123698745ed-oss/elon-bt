@@ -12,6 +12,16 @@ RAW = os.environ.get("RAW_DIR", "raw")
 API = "https://api.finmindtrade.com/api/v4/data"
 BUDGET_MIN = float(os.environ.get("BUDGET_MIN", "330"))
 COOLDOWN = 15 * 60
+# 允許下載的台北時段，例如 "17-8" 表示 17:00～隔日 08:00；空字串＝全天
+ALLOW = os.environ.get("ALLOW_HOURS", "17-8")
+
+
+def allowed_now() -> bool:
+    if not ALLOW:
+        return True
+    a, b = (int(x) for x in ALLOW.split("-"))
+    h = (datetime.now(timezone.utc).hour + 8) % 24
+    return (a <= h < b) if a < b else (h >= a or h < b)
 START = "1990-01-01"
 
 GLOBAL = ["TaiwanStockInfo", "TaiwanStockDelisting", "TaiwanStockSplitPrice", "TaiwanStockTradingDate"]
@@ -44,7 +54,7 @@ class Client:
             p.update(data_id=data_id, start_date=START)
         url = API + "?" + urllib.parse.urlencode(p)
         while True:
-            if deadline and time.time() > deadline:
+            if (deadline and time.time() > deadline) or not allowed_now():
                 return None
             now = time.time()
             ready = [t for t in self.toks if self.cool[t] <= now]
