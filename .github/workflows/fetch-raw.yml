@@ -1,13 +1,11 @@
 name: fetch-raw
 # 原始資料下載（可續傳）。進度存在 Release「raw-progress」。
-# FinMind 只在台北時間 23:00～07:00 下載，避開 Emit 白天與 21:15～22:45 的排程用量。
+# FinMind 全天下載（Ed 2026-11-04 同意）。
 on:
   push:
     paths: ["jobs/fetch.txt"]
   schedule:
-    - cron: "5 15 * * *"   # 台北 23:05（GitHub 排程常延遲，多排幾個時點；concurrency 讓它們依序接續）
-    - cron: "5 17 * * *"   # 台北 01:05
-    - cron: "5 19 * * *"   # 台北 03:05
+    - cron: "5 */3 * * *"   # 每 3 小時；GitHub 排程常延遲，concurrency 讓各次依序接續
   workflow_dispatch:
 concurrency: { group: fetch-raw, cancel-in-progress: false }
 permissions: { contents: write }
@@ -31,15 +29,9 @@ jobs:
           ls raw || true
       - name: official
         run: python data_layer/fetch_official.py
-      - name: finmind (night window only)
-        run: |
-          H=$(TZ=Asia/Taipei date +%H)
-          if [ "$H" -ge 23 ] || [ "$H" -lt 7 ]; then
-            M=$(( ( (7 - 10#$H + 24) % 24 ) * 60 - 20 )); [ $M -gt 300 ] && M=300
-            BUDGET_MIN=$M python data_layer/fetch_finmind.py
-          else
-            echo "outside 23:00-07:00 Taipei, skip FinMind"
-          fi
+      - name: finmind
+        # Ed 2026-11-04 08:04：token 白天沒在用，可全天下載；額度用完時程式自動冷卻等待
+        run: BUDGET_MIN=320 python data_layer/fetch_finmind.py
       - name: save progress
         if: always()
         run: |
