@@ -5,7 +5,7 @@
 - 402（額度用完）時該 token 冷卻，全部冷卻就等待；超過時間預算即停止，下次接續。
 - 每次請求寫入 raw/_attempts_finmind.csv（時間、資料集、代號、token尾碼、HTTP狀態、筆數）。
 """
-import csv, gzip, json, os, re, sys, time, urllib.error, urllib.parse, urllib.request
+import csv, glob, gzip, json, os, re, sys, time, urllib.error, urllib.parse, urllib.request
 from datetime import datetime, timezone
 
 RAW = os.environ.get("RAW_DIR", "raw")
@@ -146,6 +146,13 @@ def main():
             save(p, d)
     ids = universe()
     todo = [(ds, i) for ds in PER_ID for i in ids if not os.path.exists(path(ds, i))]
+    # 優先清單（jobs/priority_*.txt，每行一個代號）：先抓這些代號，其餘照原順序（Ed 2026-11-04 23:37 指定 052 優先）
+    pri = set()
+    for f in sorted(glob.glob("jobs/priority_*.txt")):
+        pri |= {x.strip() for x in open(f) if x.strip() and not x.startswith("#")}
+    if pri:
+        todo.sort(key=lambda t: 0 if t[1] in pri else 1)
+        print(f"priority ids {len(pri)}, priority requests {sum(1 for t in todo if t[1] in pri)}", flush=True)
     print(f"universe {len(ids)} ids, todo {len(todo)} requests", flush=True)
     done = 0
     for ds, i in todo:
