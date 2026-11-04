@@ -1,0 +1,40 @@
+{
+ "built_at": "2026-11-04T23:55:33+00:00",
+ "raw_dir": "raw",
+ "files": {
+  "calendar.parquet": {
+   "rows": 6894,
+   "sha256": "d0372774dd6379e3e4ceba3190dc0c0ac74b51c5ed9a26c0c808e06b2b6d5d5c"
+  },
+  "status.parquet": {
+   "rows": 3252,
+   "sha256": "74ac6204a0ba1170bf52b82cc638b6c6b6f0fb2507149bfc82893131f95108b9"
+  },
+  "daily_k.parquet": {
+   "rows": 9584351,
+   "sha256": "8722988b871da6007fd5f26d04df69ff8f7eac2bcfbe2d1470ed9d5e56a204c0"
+  },
+  "official_exright.parquet": {
+   "rows": 31843,
+   "sha256": "6c6a68241a88a7b757b1fa56263c121b6cfa9e52b1b0cc39a4ce7db2678b1469"
+  },
+  "corp_actions.parquet": {
+   "rows": 41307,
+   "sha256": "5c83997fec760ebc64f7e3ce6c75b56add26363f36ae58ae0a6843c88c62dade"
+  }
+ },
+ "finmind_status": {
+  "universe": 2647,
+  "remaining": 0,
+  "running": false,
+  "done_this_run": 0,
+  "finished_at": "2026-11-04T19:40:38+00:00"
+ },
+ "raw_package": {
+  "release": "raw-progress",
+  "asset": "raw-progress.tar.gz",
+  "sha256": "1daebe253e78b1f68b9e3a0376d7962f598ac0d63f09038da4ff3db200a3ed07"
+ },
+ "code_commit": "2b7e26f69ab2a62b92d7133dc1236774157305c8",
+ "data_tag": "data-20261105"
+}

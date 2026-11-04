@@ -1,0 +1,40 @@
+name: build-data
+# 由 raw-progress 原始資料建置資料層並發佈 Release data-YYYYMMDD（push jobs/build.txt 觸發）
+on:
+  push:
+    paths: ["jobs/build.txt"]
+  workflow_dispatch:
+permissions: { contents: write }
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install pandas pyarrow numpy scipy pytest tabulate
+      - name: get raw
+        run: |
+          gh release download raw-progress -p raw-progress.tar.gz
+          sha256sum raw-progress.tar.gz
+          tar xzf raw-progress.tar.gz
+      - name: build
+        run: RAW_DIR=raw OUT_DIR=out python data_layer/build.py
+      - name: tests (data layer)
+        run: ELON_OUT=out python -m pytest -q tests/test_data_layer.py tests/test_regression.py
+      - name: publish
+        run: |
+          export TAG=data-$(TZ=Asia/Taipei date +%Y%m%d)
+          python - <<'P'
+          import json,hashlib,os,subprocess
+          m=json.load(open('out/manifest.json'))
+          m['raw_package']={'asset':'raw.tar.gz','sha256':hashlib.sha256(open('raw-progress.tar.gz','rb').read()).hexdigest()}
+          m['code_commit']=os.environ['GITHUB_SHA']; m['data_tag']=os.environ.get('TAG','')
+          json.dump(m,open('out/manifest.json','w'),ensure_ascii=False,indent=1)
+          P
+          cp raw-progress.tar.gz out/raw.tar.gz
+          gh release delete "$TAG" -y --cleanup-tag 2>/dev/null || true
+          gh release create "$TAG" --title "$TAG 第一期資料層" --notes "清冊 manifest.json；建置日誌 build_log.json；原始資料 raw.tar.gz；程式版本見 manifest.code_commit" out/*

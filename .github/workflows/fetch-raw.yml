@@ -4,8 +4,7 @@ name: fetch-raw
 on:
   push:
     paths: ["jobs/fetch.txt"]
-  schedule:
-    - cron: "5 */3 * * *"   # 每 3 小時；GitHub 排程常延遲，concurrency 讓各次依序接續
+  # 排程已停用（2026-11-05 FinMind 第一期下載完成）；需要更新資料時 push jobs/fetch.txt
   workflow_dispatch:
 concurrency: { group: fetch-raw, cancel-in-progress: false }
 permissions: { contents: write }
