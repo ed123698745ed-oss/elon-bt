@@ -120,8 +120,22 @@ def universe():
     return sorted(i for i in ids if re.fullmatch(r"\d{4}", i))
 
 
+def heartbeat(ids, done, total):
+    """每 15 分鐘把進度與請求紀錄上傳到 Release（只在 GitHub Actions 內），供每小時檢查。"""
+    left = sum(1 for ds in PER_ID for i in ids if not os.path.exists(path(ds, i)))
+    st = {"universe": len(ids), "remaining": left, "done_this_run": done, "todo_this_run": total,
+          "heartbeat_at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "running": True}
+    p = os.path.join(RAW, "_status_finmind.json")
+    json.dump(st, open(p, "w"))
+    if os.environ.get("GITHUB_ACTIONS"):
+        import subprocess
+        subprocess.run(["gh", "release", "upload", "raw-progress", p,
+                        os.path.join(RAW, "_attempts_finmind.csv"), "--clobber"], capture_output=True)
+
+
 def main():
     deadline = time.time() + BUDGET_MIN * 60
+    last_hb = 0.0
     c = Client(tokens())
     for ds in GLOBAL:
         p = path(ds)
@@ -140,10 +154,13 @@ def main():
             break
         save(path(ds, i), d)
         done += 1
+        if time.time() - last_hb > 900:
+            heartbeat(ids, done, len(todo))
+            last_hb = time.time()
         if done % 200 == 0:
             print(f"{done}/{len(todo)}", flush=True)
     left = sum(1 for ds in PER_ID for i in ids if not os.path.exists(path(ds, i)))
-    status = {"universe": len(ids), "remaining": left,
+    status = {"universe": len(ids), "remaining": left, "running": False, "done_this_run": done,
               "finished_at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
     json.dump(status, open(os.path.join(RAW, "_status_finmind.json"), "w"))
     print(status)
