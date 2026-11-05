@@ -4,7 +4,7 @@
 舊程式未核對回傳日期，致 2003～2010 櫃買除權息整段空白。本程式每次下載都核對回傳
 日期／代號／月份與查詢一致，不一致記 mismatch、不存檔。
 
-用法：python data_layer/fetch_market.py tpex|twse
+用法：python data_layer/fetch_market.py tpex|tpex_stock|twse
   tpex：櫃買除權息歷史（2000-09 起，2007 以前 exDailyQHis、2008 起 exDailyQ）
         ＋櫃買每日收盤行情（2007-07 起逐交易日）
         ＋櫃買個股月成交（jobs/market_need_months.csv 中 2007-07 以前的股票月份）
@@ -54,6 +54,10 @@ def tpex_jobs():
         body = urllib.parse.urlencode({"date": d.replace("-", "/"), "type": "AL", "response": "json"}).encode()
         yield (f"tpex_daily/{d[:4]}/{d}.json", ("POST", "https://www.tpex.org.tw/www/zh-tw/afterTrading/otc", body),
                ("table_date", roc(d)), False)
+
+
+
+def tpex_stock_jobs():
     for sid, ym in need_months():
         if ym >= "2007-07":
             continue
@@ -145,7 +149,7 @@ def check(j, rule):
 
 
 def main(src):
-    jobs = tpex_jobs if src == "tpex" else twse_jobs
+    jobs = {"tpex": tpex_jobs, "tpex_stock": tpex_stock_jobs, "twse": twse_jobs}[src]
     os.makedirs(OUT, exist_ok=True)
     logp = os.path.join(RAW, f"_attempts_market_{src}.csv")
     new = not os.path.exists(logp)

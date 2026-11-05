@@ -12,7 +12,7 @@ jobs:
   fetch:
     strategy:
       fail-fast: false
-      matrix: { src: [tpex, twse] }
+      matrix: { src: [tpex, tpex_stock, twse] }
     concurrency:
       group: fetch-market-${{ matrix.src }}
       cancel-in-progress: false

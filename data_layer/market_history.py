@@ -108,7 +108,9 @@ def twse_stock_months() -> pd.DataFrame:
 def membership(st: pd.DataFrame, log: dict) -> pd.DataFrame:
     """回傳官方逐日市場別（stock_id, date, market, src）。同日兩市場都有時記衝突、兩者都保留供人工核對。"""
     parts = [tpex_daily(), tpex_stock_months(), twse_daily(), twse_stock_months()]
-    m = pd.concat([p[["stock_id", "date", "market", "src"]] for p in parts if len(p)], ignore_index=True)
+    parts = [p[["stock_id", "date", "market", "src"]] for p in parts if len(p)]
+    m = pd.concat(parts, ignore_index=True) if parts else pd.DataFrame(columns=["stock_id", "date", "market", "src"])
+    m["date"] = pd.to_datetime(m["date"])
     m = m.drop_duplicates(["stock_id", "date", "market"])
     both = m.groupby(["stock_id", "date"])["market"].nunique()
     log["market_history"] = {"rows": len(m), "by_src": m["src"].value_counts().to_dict(),
