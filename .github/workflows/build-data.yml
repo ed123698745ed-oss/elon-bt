@@ -21,7 +21,7 @@ jobs:
           gh release download raw-progress -p raw-progress.tar.gz
           tar xzf raw-progress.tar.gz
           # 退回-67：逐日市場別、櫃買歷史除權息、官方減資表（fetch-market）
-          for s in tpex twse; do gh release download raw-market -p market-$s.tar.gz && tar xzf market-$s.tar.gz || echo "缺 market-$s"; done
+          for s in tpex tpex_stock twse; do gh release download raw-market -p market-$s.tar.gz && tar xzf market-$s.tar.gz || echo "缺 market-$s"; done
           tar czf raw-all.tar.gz raw
           sha256sum raw-progress.tar.gz market-*.tar.gz raw-all.tar.gz | tee raw_sha256.txt
       - name: build
