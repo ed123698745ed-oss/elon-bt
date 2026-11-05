@@ -17,6 +17,7 @@ import glob
 import gzip
 import json
 import os
+import re
 
 import pandas as pd
 
@@ -63,19 +64,91 @@ def dividends() -> pd.DataFrame:
     return d.drop(columns=["ann_dt"])
 
 
+def _detail(html: str, key: str):
+    m = re.search(key + r"[:：]?\s*(?:<[^>]+>|\s|&nbsp;?)*([0-9.,]+|NA)", html or "")
+    if not m or m.group(1) == "NA":
+        return None
+    return float(m.group(1).replace(",", ""))
+
+
+def official_reductions() -> pd.DataFrame:
+    """官方減資恢復買賣表：櫃買 revivt（2013 起）、證交所 TWTAUU（2011 起）。
+    取每仟股換發新股、每股退還股款、減資後現金增資（有則另標，認購權不在本表處理）。"""
+    rows = []
+    for f in sorted(glob.glob(f"{RAW}/market/tpex_reduction/*.json")):
+        j = json.load(open(f, encoding="utf-8"))
+        for t in j.get("tables") or []:
+            fl = [x.strip() for x in t.get("fields") or []]
+            if "恢復買賣日期" not in fl:
+                continue
+            for r in t.get("data") or []:
+                x = dict(zip(fl, r))
+                html = x.get("詳細資料", "")
+                d = str(x["恢復買賣日期"]).strip()
+                rows.append(dict(stock_id=str(x["股票代號"]).strip(), ex_date=f"{int(d[:3]) + 1911}-{d[3:5]}-{d[5:7]}",
+                                 per_k=_detail(html, "每壹仟股換發新股票"), refund=_detail(html, "每股退還股款"),
+                                 rights_sh=_detail(html, "現金增資總股數"), reason=x.get("減資原因"),
+                                 last_close=x.get("最後交易日之收盤價格"), ref=x.get("減資恢復買賣開始日參考價格"),
+                                 src=f"TPEx 減資恢復買賣參考價 {os.path.basename(f)}"))
+    for f in sorted(glob.glob(f"{RAW}/market/twse_reduction/*.json")):
+        j = json.load(open(f, encoding="utf-8"))
+        fl = [x.strip() for x in j.get("fields") or []]
+        for r in j.get("data") or []:
+            x = dict(zip(fl, r))
+            sid = str(x.get("股票代號", "")).strip()
+            d = str(x.get("恢復買賣日期", "")).strip()
+            if not sid or not d:
+                continue
+            det = json.dumps(x, ensure_ascii=False)
+            rows.append(dict(stock_id=sid, ex_date=_iso(d), per_k=_detail(det, "每仟股換發新股|每壹仟股換發新股票|減資換股率"),
+                             refund=_detail(det, "每股退還股款|退還股款"), rights_sh=None, reason=x.get("減資原因"),
+                             last_close=x.get("停止買賣前收盤價格"), ref=x.get("恢復買賣參考價"),
+                             src=f"TWSE TWTAUU {os.path.basename(f)}"))
+    d = pd.DataFrame(rows, columns=["stock_id", "ex_date", "per_k", "refund", "rights_sh", "reason", "last_close", "ref", "src"])
+    if len(d):
+        d["ex_date"] = pd.to_datetime(d["ex_date"])
+    return d
+
+
+def _iso(s: str) -> str:
+    n = re.findall(r"\d+", s)
+    if len(n) == 1 and len(n[0]) == 7:
+        return f"{int(n[0][:3]) + 1911}-{n[0][3:5]}-{n[0][5:]}"
+    if len(n) == 1 and len(n[0]) == 8:
+        return f"{n[0][:4]}-{n[0][4:6]}-{n[0][6:]}"
+    y = int(n[0])
+    return f"{y + 1911 if y < 1911 else y}-{int(n[1]):02d}-{int(n[2]):02d}"
+
+
 def reductions() -> pd.DataFrame:
+    """退回-67：換股比與退還現金只用官方公告值（官方減資表）。
+    官方表查無者：彌補虧損案的「停止買賣前收盤÷恢復參考價」只記在 share_ratio_inferred（僅供比對），
+    share_ratio 留空 → 標資料不足，持有期間碰到的交易自動排除（A5）。"""
+    off = official_reductions()
+    offk = {(r.stock_id, r.ex_date): r for r in off.itertuples()} if len(off) else {}
     rows = []
     for p in glob.glob(f"{RAW}/finmind/TaiwanStockCapitalReductionReferencePrice/*.json.gz"):
         for r in _jl(p).get("data", []):
             last, post = _f(r.get("ClosingPriceonTheLastTradingDay")), _f(r.get("PostReductionReferencePrice"))
             reason = r.get("ReasonforCapitalReduction") or ""
             losses = "loss" in reason.lower()
-            ok = losses and last > 0 and post > 0
-            rows.append(dict(stock_id=r["stock_id"], ex_date=r["date"], kind="減資",
-                             cash=0.0 if ok else None, share_ratio=(last / post) if ok else None, cash_date=None,
-                             announced=None, source="FinMind CapitalReductionReferencePrice",
-                             flag=("由官方參考價反推（彌補虧損、無退還現金）" if ok else f"資料不足：{reason or '原因未載'}，換股比與退還現金待官方資料"),
-                             reduction_reason=reason))
+            inferred = (last / post) if (losses and last > 0 and post > 0) else None
+            o = offk.get((r["stock_id"], pd.Timestamp(r["date"])))
+            if o is not None and o.per_k is not None:
+                basis = "官方公告值"
+                ratio, cash = o.per_k / 1000.0, (o.refund or 0.0)
+                flag = None if not o.rights_sh else "減資後現金增資：認購權未處理，資料不足"
+                src = o.src
+                if flag:
+                    ratio = cash = None
+            else:
+                basis = "僅有反推值" if inferred is not None else "取不到"
+                ratio = cash = None
+                flag = (f"資料不足：官方減資表查無（{'彌補虧損，反推值只供比對' if inferred is not None else reason or '原因未載'}）")
+                src = "FinMind CapitalReductionReferencePrice"
+            rows.append(dict(stock_id=r["stock_id"], ex_date=r["date"], kind="減資", cash=cash, share_ratio=ratio,
+                             cash_date=None, announced=None, source=src, flag=flag, reduction_reason=reason,
+                             ratio_basis=basis, share_ratio_inferred=inferred))
     d = pd.DataFrame(rows)
     if not d.empty:
         d["ex_date"] = pd.to_datetime(d["ex_date"])
@@ -87,9 +160,11 @@ def splits() -> pd.DataFrame:
     rows = []
     for r in _jl(p).get("data", []) if os.path.exists(p) else []:
         b, a = _f(r.get("before_price")), _f(r.get("after_price"))
-        rows.append(dict(stock_id=r["stock_id"], ex_date=r["date"], kind="面額變更", cash=0.0,
-                         share_ratio=(b / a) if a else None, cash_date=None, announced=None,
-                         source="FinMind TaiwanStockSplitPrice", flag=None if a else "資料不足"))
+        # 退回-67（A5）：變更前價÷變更後參考價是反推值（參考價經檔位進位，例 0050 得 4.000212），不進主結果
+        rows.append(dict(stock_id=r["stock_id"], ex_date=r["date"], kind="面額變更", cash=None,
+                         share_ratio=None, share_ratio_inferred=(b / a) if a else None, ratio_basis="僅有反推值" if a else "取不到",
+                         cash_date=None, announced=None, source="FinMind TaiwanStockSplitPrice",
+                         flag="資料不足：分割比率待官方公告（反推值只供比對）"))
     d = pd.DataFrame(rows)
     if not d.empty:
         d["ex_date"] = pd.to_datetime(d["ex_date"])
@@ -112,6 +187,8 @@ def build(official_ex: pd.DataFrame, log: dict) -> pd.DataFrame:
         "rows": len(ca), "by_kind": ca["kind"].value_counts().to_dict(),
         "dividend_dropped_post_ex_or_dup": int(dv.attrs.get("dropped_post_ex_or_dup", 0)),
         "reduction_data_insufficient": int(rd["share_ratio"].isna().sum()) if not rd.empty else 0,
+        "reduction_ratio_basis": rd["ratio_basis"].value_counts().to_dict() if not rd.empty else {},
+        "split_ratio_basis": sp["ratio_basis"].value_counts().to_dict() if not sp.empty else {},
         "official_exright_rows": len(official_ex),
         "official_without_finmind_dividend": len(miss),
         "official_mismatch_gt_0.5pct": len(bad),

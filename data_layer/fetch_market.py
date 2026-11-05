@@ -68,6 +68,10 @@ def twse_jobs():
     for y in range(2011, t.year + 1):  # 證交所減資恢復買賣參考價格（官方 2011-01-01 起提供）
         url = f"https://www.twse.com.tw/rwd/zh/reducation/TWTAUU?startDate={y}0101&endDate={y}1231&response=json"
         yield f"twse_reduction/{y}.json", ("GET", url, None), ("twse_range", f"{y}0101"), y == t.year
+    for y in range(2011, t.year + 1):  # ETF 分割／反分割、面額變更恢復買賣參考價（端點名稱待首次回應確認，失敗照記）
+        for code, sub in (("TWTCAU", "split"), ("TWTB8U", "change")):
+            url = f"https://www.twse.com.tw/rwd/zh/{sub}/{code}?startDate={y}0101&endDate={y}1231&response=json"
+            yield f"twse_{code.lower()}/{y}.json", ("GET", url, None), ("twse_range", f"{y}0101"), y == t.year
     for d in trading_days():
         if d < "2004-02-11":
             continue
