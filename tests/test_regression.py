@@ -199,3 +199,14 @@ def test_r52_event_period_after_announcement():
 
 # 退回-57、退回-04 的真實資料版在 tests/test_data_layer.py；
 # 退回-55（美股 GGP／GM 同序列）不在台股資料層，以 test_precheck_end_to_end 的價格序列雜湊檢查覆蓋。
+
+
+def test_r38_original_case_8072_cash_reduction():
+    """退回-38 原案：陞泰 8072 現金減資（2017-09-08 除權），每舊股換 0.8 股並退還 2 元。
+    進場 20.05、出場 22.85（2017-09-20 收盤）；原案正確值 (22.85×0.8＋2)÷20.05−1＝+1.147132%，
+    R03 錯值 0.769%（價格比例連乘）。數值依 Eve 第一期審查引述之原案（防錯清單退回-38）。"""
+    act = Action(date(2017, 9, 8), "現金減資", share_ratio=0.8, cash=2.0, source="025 R04 原案")
+    r = trade_return("long", 20.05, 22.85, "2017-08-17", "2017-09-20", [act]).ret
+    assert r == pytest.approx(22.85 * 0.8 / 20.05 + 2 / 20.05 - 1, abs=1e-15)
+    assert round(r * 100, 6) == 1.147132
+    assert abs(r - 0.00769) > 0.003
