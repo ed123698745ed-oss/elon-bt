@@ -195,10 +195,14 @@ def split_by_market(px: pd.DataFrame, st: pd.DataFrame, cal: pd.DataFrame):
     cur_mkt = px["stock_id"].map(stv["status"])
     ver = px["stock_id"].map(stv["verified"]).fillna(False).astype(bool)
     in_cur = ver & (px["date"] >= cur_start)
-    m = mh.membership(st, LOG)
-    ev = mh.listing_events(m, st)
-    mm = m.drop_duplicates(["stock_id", "date"])[["stock_id", "date", "market"]].rename(columns={"market": "mkt_off"})
-    px = px.merge(mm, on=["stock_id", "date"], how="left")
+    seg = mh.segments(list(cal["date"]), LOG)
+    ev = mh.listing_events(seg, st)
+    px = px.reset_index(drop=True)
+    in_cur = in_cur.reset_index(drop=True)
+    cur_mkt = cur_mkt.reset_index(drop=True)
+    px["mkt_off"] = None
+    nc = ~in_cur.values
+    px.loc[nc, "mkt_off"] = mh.lookup(px.loc[nc, ["stock_id", "date"]], seg).values
     px["market"] = cur_mkt.where(in_cur.values, None).values
     px.loc[px["market"].isna(), "market"] = px.loc[px["market"].isna(), "mkt_off"]
     px["market_src"] = "現行官方掛牌期間"
@@ -216,7 +220,8 @@ def split_by_market(px: pd.DataFrame, st: pd.DataFrame, cal: pd.DataFrame):
                            "stocks_with_restored_rows": int(px.loc[~in_cur.values & ~q.values, "stock_id"].nunique()),
                            "transfers": int((~ev["initial"]).sum()) if len(ev) else 0,
                            "first5_rows_by_status": nl["no_limit_status"].value_counts().to_dict() if len(nl) else {}}
-    return main, qx.drop(columns=["mkt_off"]), ev, nl
+    LOG["market_split"]["segments_file"] = "market_segments.parquet（官方逐日區段）"
+    return main, qx.drop(columns=["mkt_off"]), seg.merge(ev[["stock_id", "start", "initial"]], on=["stock_id", "start"], how="left"), nl
 
 
 def build_daily(px: pd.DataFrame, ex: pd.DataFrame, ca: pd.DataFrame | None = None, nl: pd.DataFrame | None = None) -> pd.DataFrame:

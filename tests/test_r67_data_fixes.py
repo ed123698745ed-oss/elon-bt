@@ -62,14 +62,17 @@ def test_otc_history_restored_and_transfer_not_initial(raw_env):
     mh, _, _ = raw_env
     st = pd.DataFrame([dict(stock_id="5521", status="上市", start_date=pd.Timestamp("2012-12-18"), verified=True),
                        dict(stock_id="4728", status="上櫃", start_date=pd.Timestamp("2012-01-10"), verified=True)])
-    m = mh.membership(st, {})
-    g = m[m.stock_id == "5521"].sort_values("date")
-    assert g.iloc[0].date == pd.Timestamp("1999-11-18") and g.iloc[0].market == "上櫃"
-    ev = mh.listing_events(m, st)
+    cal = list(pd.bdate_range("1999-11-01", "2013-01-31"))
+    seg = mh.segments(cal, {})
+    g = seg[seg.stock_id == "5521"].sort_values("start")
+    assert g.iloc[0].start == pd.Timestamp("1999-11-18") and g.iloc[0].market == "上櫃"
+    px = pd.DataFrame({"stock_id": ["5521", "5521", "5521"],
+                       "date": pd.to_datetime(["1999-11-18", "1999-11-17", "2012-12-17"])})
+    assert list(mh.lookup(px, seg)) == ["上櫃", None, "上櫃"]
+    ev = mh.listing_events(seg, st)
     e = ev[ev.stock_id == "5521"].sort_values("start")
     assert list(e.market) == ["上櫃", "上市"] and list(e.initial) == [True, False]
-    cal = pd.bdate_range("2012-01-02", "2013-01-31")
-    nl = mh.first5_no_limit(ev, list(cal))
+    nl = mh.first5_no_limit(ev, cal)
     assert not ((nl.stock_id == "5521") & (nl.date >= "2012-12-18")).any()
 
 
@@ -77,7 +80,7 @@ def test_initial_listing_first5_no_limit(raw_env):
     """雙美 4728 2012-01-10 初次上櫃：2012-01-12 在前五日內 → 無漲跌幅、不判跳動。"""
     mh, _, _ = raw_env
     st = pd.DataFrame([dict(stock_id="4728", status="上櫃", start_date=pd.Timestamp("2012-01-10"), verified=True)])
-    ev = mh.listing_events(pd.DataFrame(columns=["stock_id", "date", "market", "src"]), st)
+    ev = mh.listing_events(pd.DataFrame(columns=["stock_id", "market", "start", "end", "days", "src"]), st)
     cal = pd.bdate_range("2012-01-02", "2012-02-28")
     nl = mh.first5_no_limit(ev, list(cal))
     days = list(nl[nl.stock_id == "4728"].date)
@@ -88,7 +91,7 @@ def test_initial_listing_first5_no_limit(raw_env):
 def test_transition_period_marked_pending(raw_env):
     mh, _, _ = raw_env
     st = pd.DataFrame([dict(stock_id="9999", status="上櫃", start_date=pd.Timestamp("2005-06-01"), verified=True)])
-    ev = mh.listing_events(pd.DataFrame(columns=["stock_id", "date", "market", "src"]), st)
+    ev = mh.listing_events(pd.DataFrame(columns=["stock_id", "market", "start", "end", "days", "src"]), st)
     nl = mh.first5_no_limit(ev, list(pd.bdate_range("2005-05-01", "2005-07-29")))
     assert nl.no_limit_status.str.startswith("待查").all()
 
@@ -96,12 +99,12 @@ def test_transition_period_marked_pending(raw_env):
 def test_pre_rule_listing_keeps_limits(raw_env):
     mh, _, _ = raw_env
     st = pd.DataFrame([dict(stock_id="9998", status="上市", start_date=pd.Timestamp("2004-06-01"), verified=True)])
-    ev = mh.listing_events(pd.DataFrame(columns=["stock_id", "date", "market", "src"]), st)
+    ev = mh.listing_events(pd.DataFrame(columns=["stock_id", "market", "start", "end", "days", "src"]), st)
     assert mh.first5_no_limit(ev, list(pd.bdate_range("2004-05-01", "2004-07-30"))).empty
 
 
 def test_etf_not_common_stock(raw_env):
     mh, _, _ = raw_env
     st = pd.DataFrame([dict(stock_id="00981A", status="上市", start_date=pd.Timestamp("2025-05-20"), verified=True)])
-    ev = mh.listing_events(pd.DataFrame(columns=["stock_id", "date", "market", "src"]), st)
+    ev = mh.listing_events(pd.DataFrame(columns=["stock_id", "market", "start", "end", "days", "src"]), st)
     assert mh.first5_no_limit(ev, list(pd.bdate_range("2025-05-01", "2025-06-30"))).empty

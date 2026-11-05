@@ -151,13 +151,16 @@ def check(j, rule):
 def main(src):
     jobs = {"tpex": tpex_jobs, "tpex_stock": tpex_stock_jobs, "twse": twse_jobs}[src]
     os.makedirs(OUT, exist_ok=True)
-    logp = os.path.join(RAW, f"_attempts_market_{src}.csv")
+    logp = os.path.join(RAW, f"_attempts_market_{src}" + (f"_s{os.environ['SHARD_K']}" if os.environ.get("SHARD_N") else "") + ".csv")
     new = not os.path.exists(logp)
     log = csv.writer(open(logp, "a", newline=""))
     if new:
         log.writerow(["utc", "file", "method", "url", "body", "http", "bytes", "result", "returned"])
     done = skipped = 0
-    for name, (method, url, body), rule, refresh in jobs():
+    shard_n, shard_k = int(os.environ.get("SHARD_N", "1")), int(os.environ.get("SHARD_K", "0"))
+    for i, (name, (method, url, body), rule, refresh) in enumerate(jobs()):
+        if i % shard_n != shard_k:
+            continue
         p = os.path.join(OUT, name)
         if os.path.exists(p) and not refresh:
             skipped += 1
@@ -188,6 +191,8 @@ def main(src):
             done += 1
         time.sleep(GAP if res != "error" else GAP * 5)
     print(f"all jobs finished; done={done} skipped={skipped}")
+    if os.environ.get("SHARD_N"):
+        return
     open(os.path.join(RAW, f"_market_{src}_complete"), "w").write(datetime.now(timezone.utc).isoformat())
 
 

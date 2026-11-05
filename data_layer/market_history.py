@@ -43,100 +43,89 @@ def _code(x):
     return str(x).strip().split()[0] if str(x).strip() else ""
 
 
-def tpex_daily() -> pd.DataFrame:
-    rows = []
+def _iter_days():
+    """逐檔串流官方逐日／逐月檔，產生 (stock_id, date字串, market, src)。不整批載入以控制記憶體。"""
     for f in glob.glob(f"{MK}/tpex_daily/*/*.json"):
-        j = json.load(open(f, encoding="utf-8"))
-        t = (j.get("tables") or [{}])[0]
-        d = _roc(t["date"])
-        fl = [x.strip() for x in t.get("fields") or []]
-        iu, idn = (fl.index("次日漲停價") if "次日漲停價" in fl else None), (fl.index("次日跌停價") if "次日跌停價" in fl else None)
+        t = (json.load(open(f, encoding="utf-8")).get("tables") or [{}])[0]
+        d = str(_roc(t["date"]).date())
         for r in t.get("data") or []:
-            rows.append((_code(r[0]), d, "上櫃", "TPEx 每日收盤行情",
-                         r[iu] if iu is not None else None, r[idn] if idn is not None else None))
-    return pd.DataFrame(rows, columns=["stock_id", "date", "market", "src", "next_up", "next_dn"])
-
-
-def tpex_stock_months() -> pd.DataFrame:
-    rows = []
+            if r:
+                yield _code(r[0]), d, "上櫃", "TPEx 每日收盤行情"
     for f in glob.glob(f"{MK}/tpex_stock/*/*.json"):
         sid = os.path.basename(os.path.dirname(f))
         t = (json.load(open(f, encoding="utf-8")).get("tables") or [{}])[0]
         for r in t.get("data") or []:
-            rows.append((sid, _roc(r[0].replace("*", "")), "上櫃", "TPEx 個股月成交"))
-    return pd.DataFrame(rows, columns=["stock_id", "date", "market", "src"])
-
-
-def twse_daily() -> pd.DataFrame:
-    rows = []
+            yield sid, str(_roc(r[0].replace("*", "")).date()), "上櫃", "TPEx 個股月成交"
     for f in glob.glob(f"{MK}/twse_daily/*/*.json"):
         j = json.load(open(f, encoding="utf-8"))
         if str(j.get("stat", "")) != "OK":
             continue
-        d = pd.Timestamp(f"{j['date'][:4]}-{j['date'][4:6]}-{j['date'][6:]}")
-        tables = j.get("tables") or []
-        hit = False
-        for t in tables:
+        d = f"{j['date'][:4]}-{j['date'][4:6]}-{j['date'][6:]}"
+        for t in j.get("tables") or []:
             fl = [x.strip() for x in t.get("fields") or []]
-            if "證券代號" in fl and ("收盤價" in fl):
+            if "證券代號" in fl and "收盤價" in fl:
                 i = fl.index("證券代號")
                 for r in t.get("data") or []:
-                    rows.append((_code(r[i]), d, "上市", "TWSE MI_INDEX"))
-                hit = True
-        if not hit:  # 舊格式：dataN／fieldsN
-            for k, v in j.items():
-                if k.startswith("fields") and "證券代號" in v:
-                    data = j.get("data" + k[6:]) or []
-                    i = v.index("證券代號")
-                    for r in data:
-                        rows.append((_code(r[i]), d, "上市", "TWSE MI_INDEX"))
-    return pd.DataFrame(rows, columns=["stock_id", "date", "market", "src"])
+                    yield _code(r[i]), d, "上市", "TWSE MI_INDEX"
 
 
-def twse_stock_months() -> pd.DataFrame:
-    rows = []
-    for f in glob.glob(f"{MK}/twse_stock/*/*.json"):
-        sid = os.path.basename(os.path.dirname(f))
-        j = json.load(open(f, encoding="utf-8"))
-        if str(j.get("stat", "")) != "OK":
+def segments(cal_days, log: dict) -> pd.DataFrame:
+    """官方逐日市場別壓成區段：同股同市場、市場交易日連續者合併。回傳 (stock_id, market, start, end, days, src)。"""
+    idx = {str(pd.Timestamp(d).date()): i for i, d in enumerate(sorted(cal_days))}
+    days = sorted(cal_days)
+    acc, srcs, off_cal = {}, {}, 0
+    for sid, d, mkt, src in _iter_days():
+        i = idx.get(d)
+        if i is None:
+            off_cal += 1
             continue
-        for r in j.get("data") or []:
-            rows.append((sid, _roc(r[0]), "上市", "TWSE 個股月成交"))
-    return pd.DataFrame(rows, columns=["stock_id", "date", "market", "src"])
+        acc.setdefault((sid, mkt), set()).add(i)
+        srcs.setdefault((sid, mkt), set()).add(src)
+    rows = []
+    for (sid, mkt), ii in acc.items():
+        ii = sorted(ii)
+        st = pv = ii[0]
+        for x in ii[1:] + [None]:
+            if x is not None and x == pv + 1:
+                pv = x
+                continue
+            rows.append((sid, mkt, pd.Timestamp(days[st]), pd.Timestamp(days[pv]), pv - st + 1, "、".join(sorted(srcs[(sid, mkt)]))))
+            if x is not None:
+                st = pv = x
+    seg = pd.DataFrame(rows, columns=["stock_id", "market", "start", "end", "days", "src"])
+    log["market_history"] = {"segments": len(seg), "stocks": int(seg["stock_id"].nunique()),
+                             "stock_days": int(seg["days"].sum()), "official_dates_not_in_calendar": off_cal}
+    return seg
 
 
-def membership(st: pd.DataFrame, log: dict) -> pd.DataFrame:
-    """回傳官方逐日市場別（stock_id, date, market, src）。同日兩市場都有時記衝突、兩者都保留供人工核對。"""
-    parts = [tpex_daily(), tpex_stock_months(), twse_daily(), twse_stock_months()]
-    parts = [p[["stock_id", "date", "market", "src"]] for p in parts if len(p)]
-    m = pd.concat(parts, ignore_index=True) if parts else pd.DataFrame(columns=["stock_id", "date", "market", "src"])
-    m["date"] = pd.to_datetime(m["date"])
-    m = m.drop_duplicates(["stock_id", "date", "market"])
-    both = m.groupby(["stock_id", "date"])["market"].nunique()
-    log["market_history"] = {"rows": len(m), "by_src": m["src"].value_counts().to_dict(),
-                             "same_day_both_markets": int((both > 1).sum())}
-    return m
+def lookup(px: pd.DataFrame, seg: pd.DataFrame) -> pd.Series:
+    """px 每列（stock_id, date）在官方區段內的市場；不在任何區段回傳 None。"""
+    out = pd.Series([None] * len(px), index=px.index, dtype=object)
+    sg = seg.sort_values("start")
+    for sid, g in px.groupby("stock_id"):
+        s = sg[sg["stock_id"] == sid]
+        if s.empty:
+            continue
+        st, en, mk = s["start"].values, s["end"].values, s["market"].values
+        dv = g["date"].values
+        pos = st.searchsorted(dv, side="right") - 1
+        ok = (pos >= 0)
+        pos2 = pos.clip(0)
+        hit = ok & (dv <= en[pos2])
+        out.loc[g.index[hit]] = mk[pos2[hit]]
+    return out
 
 
-def listing_events(m: pd.DataFrame, st: pd.DataFrame) -> pd.DataFrame:
-    """每檔股票的市場區段：初次掛牌日、各次轉板日。現行官方掛牌日一併納入（取較早者）。"""
-    seg = []
-    for sid, g in m.sort_values("date").groupby("stock_id"):
-        g = g.drop_duplicates("date", keep="first")
-        chg = g["market"].ne(g["market"].shift())
-        for i, (_, r) in enumerate(g[chg].iterrows()):
-            seg.append(dict(stock_id=sid, start=r["date"], market=r["market"], initial=(i == 0)))
-    ev = pd.DataFrame(seg, columns=["stock_id", "start", "market", "initial"])
+def listing_events(seg: pd.DataFrame, st: pd.DataFrame) -> pd.DataFrame:
+    """每檔股票的市場區段起點：初次掛牌（最早一段）與轉板（市場改變）。現行官方掛牌日一併納入。"""
     cur = st[st["verified"]][["stock_id", "status", "start_date"]].rename(columns={"status": "market", "start_date": "start"})
-    ev = pd.concat([ev, cur.assign(initial=None)], ignore_index=True).sort_values(["stock_id", "start"])
-    ev = ev.drop_duplicates(["stock_id", "market", "start"])
-    # 同市場連續區段合併；初次掛牌＝最早一段
+    ev = pd.concat([seg[["stock_id", "market", "start"]], cur], ignore_index=True).sort_values(["stock_id", "start"])
     out = []
     for sid, g in ev.groupby("stock_id"):
         g = g[g["market"].ne(g["market"].shift())]
         for i, (_, r) in enumerate(g.iterrows()):
             out.append(dict(stock_id=sid, start=r["start"], market=r["market"], initial=(i == 0)))
-    return pd.DataFrame(out)
+    return pd.DataFrame(out, columns=["stock_id", "start", "market", "initial"])
 
 
 def first5_no_limit(ev: pd.DataFrame, cal_days: list) -> pd.DataFrame:
