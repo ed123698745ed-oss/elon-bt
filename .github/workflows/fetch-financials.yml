@@ -48,7 +48,9 @@ jobs:
         run: |
           tar czf raw-financials.tar.gz raw_fin
           sha256sum raw-financials.tar.gz | tee raw-financials.sha256
-          gh release upload raw-financials raw-financials.tar.gz raw-financials.sha256 raw_fin/_attempts_finmind.csv raw_fin/_status_fin.json --clobber
+          files="raw-financials.tar.gz raw-financials.sha256"
+          for f in raw_fin/_attempts_finmind.csv raw_fin/_status_fin.json; do [ -s "$f" ] && files="$files $f"; done
+          gh release upload raw-financials $files --clobber
       - name: build and publish when complete
         if: env.SKIP != '1'
         run: |
