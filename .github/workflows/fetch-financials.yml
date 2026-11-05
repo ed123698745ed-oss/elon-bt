@@ -1,0 +1,62 @@
+name: fetch-financials
+# 財報原始資料下載（綜合損益表、資產負債表），進度存在 Release「raw-financials」（Ed 2026-11-05 12:21 同意甲方案）。
+# FinMind 只在台北 17:00～隔日 08:00 下載（Ed 2026-11-04 10:05）；全部抓完後建置並發佈 Release fin-YYYYMMDD。
+on:
+  push:
+    paths: ["jobs/financials.txt"]
+  schedule:
+    - cron: "5 9,15,21 * * *"   # 台北 17:05、23:05、05:05 接續；抓完後自動跳過
+  workflow_dispatch:
+concurrency: { group: fetch-financials, cancel-in-progress: false }
+permissions: { contents: write }
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      FINMIND_TOKEN_1: ${{ secrets.FINMIND_TOKEN_1 }}
+      FINMIND_TOKEN_2: ${{ secrets.FINMIND_TOKEN_2 }}
+      FINMIND_TOKEN_3: ${{ secrets.FINMIND_TOKEN_3 }}
+      FINMIND_TOKEN_4: ${{ secrets.FINMIND_TOKEN_4 }}
+      RAW_DIR: raw_fin
+      OUT_DIR: out_fin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install pandas pyarrow
+      - name: already published?
+        run: |
+          if gh release list --limit 100 | grep -q '^fin-\|	fin-'; then echo "SKIP=1" >> $GITHUB_ENV; echo "已有 fin- 版本，跳過"; fi
+      - name: restore progress and universe
+        if: env.SKIP != '1'
+        run: |
+          gh release view raw-financials >/dev/null 2>&1 || gh release create raw-financials --title raw-financials --notes "財報原始資料下載進度（自動更新）" --prerelease
+          gh release download raw-financials -p raw-financials.tar.gz || true
+          [ -f raw-financials.tar.gz ] && tar xzf raw-financials.tar.gz || mkdir -p raw_fin
+          # 代號清單沿用第一期 raw-progress（與 data-20261105 同一份 TaiwanStockInfo／TaiwanStockDelisting）
+          gh release download raw-progress -p raw-progress.tar.gz
+          tar xzf raw-progress.tar.gz raw/finmind/TaiwanStockInfo raw/finmind/TaiwanStockDelisting
+          mkdir -p raw_fin/finmind && cp -r raw/finmind/TaiwanStockInfo raw/finmind/TaiwanStockDelisting raw_fin/finmind/
+          rm -rf raw raw-progress.tar.gz
+      - name: fetch
+        if: env.SKIP != '1'
+        run: ALLOW_HOURS=17-8 BUDGET_MIN=320 python data_layer/fetch_financials.py fetch
+      - name: save progress
+        if: always() && env.SKIP != '1'
+        run: |
+          tar czf raw-financials.tar.gz raw_fin
+          sha256sum raw-financials.tar.gz | tee raw-financials.sha256
+          gh release upload raw-financials raw-financials.tar.gz raw-financials.sha256 raw_fin/_attempts_finmind.csv raw_fin/_status_fin.json --clobber
+      - name: build and publish when complete
+        if: env.SKIP != '1'
+        run: |
+          left=$(python -c "import json;print(json.load(open('raw_fin/_status_fin.json'))['remaining'])")
+          echo "remaining=$left"
+          [ "$left" = "0" ] || exit 0
+          python data_layer/fetch_financials.py build
+          TAG=fin-$(TZ=Asia/Taipei date +%Y%m%d)
+          if gh release view "$TAG" >/dev/null 2>&1; then echo "release $TAG 已存在，停止"; exit 1; fi
+          cp raw-financials.tar.gz raw-financials.sha256 out_fin/
+          gh release create "$TAG" --title "$TAG 財報資料" --notes "financials.parquet（綜合損益表＋資產負債表，FinMind 現行值）；清冊 manifest_fin.json；原始資料 raw-financials.tar.gz；程式版本見 manifest_fin.code_commit" out_fin/*
