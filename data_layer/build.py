@@ -206,9 +206,7 @@ def split_by_market(px: pd.DataFrame, st: pd.DataFrame, cal: pd.DataFrame):
     q = px["market"].isna()
     cov = mh.coverage()
     qx = px[q].copy()
-    qx["quarantine_reason"] = [
-        "官方查無（興櫃、未掛牌或已下市）" if mh.covered(sid, d, cov) else "官方檔缺漏（未取得，不判定）"
-        for sid, d in zip(qx["stock_id"], qx["date"])]
+    qx["quarantine_reason"] = [mh.quarantine_reason(sid, d, cov) for sid, d in zip(qx["stock_id"], qx["date"])]
     main = px[~q].drop(columns=["mkt_off"]).copy()
     nl = mh.first5_no_limit(ev, list(cal["date"]))
     LOG["market_split"] = {"raw_rows": len(px), "main_rows": len(main), "quarantine_rows": len(qx),

@@ -12,7 +12,7 @@
         ＋證交所個股月成交 STOCK_DAY（2004-02 以前的股票月份）
 每次請求寫入 raw/_attempts_market_<src>.csv。BUDGET_MIN 分鐘到即停，下次續傳。
 """
-import csv, json, os, sys, time, urllib.error, urllib.parse, urllib.request
+import csv, glob, json, os, sys, time, urllib.error, urllib.parse, urllib.request
 from datetime import date, datetime, timezone
 
 RAW = os.environ.get("RAW_DIR", "raw")
@@ -78,13 +78,17 @@ def twse_jobs():
         k = d.replace("-", "")
         url = f"https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date={k}&type=ALLBUT0999&response=json"
         yield f"twse_daily/{d[:4]}/{d}.json", ("GET", url, None), ("date_eq", k), False
-    cal_months = [("1101", f"{y}-{m:02d}") for y in range(1999, 2005) for m in range(1, 13) if f"{y}-{m:02d}" < "2004-03"]
-    for sid, ym in cal_months + need_months():  # 1101 台泥 1999-01～2004-02 全月：2004-02-11 前的官方交易日曆核對用
-        if ym >= "2004-03":
-            continue
-        y, m = ym.split("-")
-        url = f"https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY?date={y}{m}01&stockNo={sid}&response=json"
-        yield f"twse_stock/{sid}/{ym}.json", ("GET", url, None), ("stock_month_twse", (sid, y, m)), False
+    # 證交所 STOCK_DAY 只提供 2010-01-04 起、MI_INDEX 只提供 2004-02-11 起（官方回應「查詢日期小於…」），
+    # 2004-02-11 前的上市逐日身分無官方逐日來源 → 不抓，相關列在資料層標「官方無逐日來源」隔離。
+    # 減資明細（每壹仟股換發新股票、每股退還股款、減資後現增）：TWTAVUDetail，依已下載的 TWTAUU 年表逐列產生。
+    for f in sorted(glob.glob(os.path.join(OUT, "twse_reduction", "*.json"))):
+        for r in json.load(open(f, encoding="utf-8")).get("data") or []:
+            det = str(r[-1]).replace(" ", "").split(",")
+            if len(det) < 2:
+                continue
+            sid, fd = det[0], det[1]
+            url = f"https://www.twse.com.tw/rwd/zh/reducation/TWTAVUDetail?STK_NO={sid}&FILE_DATE={fd}&response=json"
+            yield f"twse_reduction_detail/{sid}_{fd}.json", ("GET", url, None), ("twse_red_detail", (sid, str(r[0]))), False
 
 
 def check(j, rule):
@@ -116,6 +120,19 @@ def check(j, rule):
     if kind == "twse_range":
         st = str(j.get("stat", ""))
         return st == "OK" or "沒有符合" in st, f"{st} {j.get('date', '')} {str(j.get('fields', ''))[:200]}"
+    if kind == "twse_red_detail":
+        sid, resume = exp
+        if str(j.get("stat", "")) != "OK" or not j.get("data"):
+            return False, f"stat {j.get('stat')}"
+        row = j["data"][0]
+        stop = str(row[2]).strip()
+        try:
+            n1 = [int(x) for x in stop.split("/")]; n2 = [int(x) for x in resume.split("/")]
+            from datetime import date as _d
+            gap = (_d(n2[0] + 1911, n2[1], n2[2]) - _d(n1[0] + 1911, n1[1], n1[2])).days
+        except Exception:
+            return False, f"bad dates {stop} {resume}"
+        return str(row[0]).strip() == sid and 0 < gap <= 45, f"{row[0].strip()} stop {stop} resume {resume} gap {gap}"
     if kind == "stock_month_twse":
         sid, y, m = exp
         got = str(j.get("date", ""))

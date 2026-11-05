@@ -95,19 +95,31 @@ def official_reductions() -> pd.DataFrame:
         fl = [x.strip() for x in j.get("fields") or []]
         for r in j.get("data") or []:
             x = dict(zip(fl, r))
-            sid = str(x.get("股票代號", "")).strip()
-            d = str(x.get("恢復買賣日期", "")).strip()
-            if not sid or not d:
-                continue
-            det = json.dumps(x, ensure_ascii=False)
-            rows.append(dict(stock_id=sid, ex_date=_iso(d), per_k=_detail(det, "每仟股換發新股|每壹仟股換發新股票|減資換股率"),
-                             refund=_detail(det, "每股退還股款|退還股款"), rights_sh=None, reason=x.get("減資原因"),
+            det = str(x.get("詳細資料", "")).replace(" ", "").split(",")
+            sid, fd = (det + ["", ""])[:2]
+            dp = f"{RAW}/market/twse_reduction_detail/{sid}_{fd}.json"
+            per_k = refund = rights = None
+            if os.path.exists(dp):
+                dj = json.load(open(dp, encoding="utf-8"))
+                dx = dict(zip([k.strip().rstrip("：:") for k in dj.get("fields") or []], (dj.get("data") or [[]])[0]))
+                per_k = _num_unit(dx.get("每壹仟股換發新股票"))
+                refund = _num_unit(dx.get("每股退還股款"))
+                rights = _num_unit(dx.get("減資並(有償)現金增資"))
+            rows.append(dict(stock_id=str(x.get("股票代號", "")).strip(), ex_date=_iso(str(x.get("恢復買賣日期", ""))),
+                             per_k=per_k, refund=refund, rights_sh=rights, reason=x.get("減資原因"),
                              last_close=x.get("停止買賣前收盤價格"), ref=x.get("恢復買賣參考價"),
-                             src=f"TWSE TWTAUU {os.path.basename(f)}"))
+                             src=f"TWSE TWTAUU／TWTAVUDetail {sid}_{fd}" if per_k is not None else "TWSE TWTAUU（明細未取得）"))
     d = pd.DataFrame(rows, columns=["stock_id", "ex_date", "per_k", "refund", "rights_sh", "reason", "last_close", "ref", "src"])
     if len(d):
         d["ex_date"] = pd.to_datetime(d["ex_date"])
     return d
+
+
+def _num_unit(v):
+    if v is None:
+        return None
+    m = re.search(r"[0-9][0-9,]*\.?[0-9]*", str(v))
+    return float(m.group(0).replace(",", "")) if m else None
 
 
 def _iso(s: str) -> str:

@@ -168,8 +168,13 @@ TPEX_DAILY_FROM = pd.Timestamp("2007-07-01")
 TWSE_DAILY_FROM = pd.Timestamp("2004-02-11")
 
 
-def covered(sid: str, d: pd.Timestamp, cov: dict) -> bool:
+def quarantine_reason(sid: str, d: pd.Timestamp, cov: dict) -> str:
+    """不在官方上市／上櫃逐日資料的列，說明為何不在：查過兩市場都沒有，或某一市場無官方逐日來源／檔案缺漏。"""
     ym = d.strftime("%Y-%m")
     tp = d in cov["tpex_daily"] if d >= TPEX_DAILY_FROM else (sid, ym) in cov["tpex_sm"]
-    tw = d in cov["twse_daily"] if d >= TWSE_DAILY_FROM else (sid, ym) in cov["twse_sm"]
-    return tp and tw
+    if d < TWSE_DAILY_FROM:
+        return "證交所 2004-02-11 前無官方逐日資料（櫃買" + ("已查無" if tp else "檔缺漏") + "）；上市身分未證實"
+    tw = d in cov["twse_daily"]
+    if tp and tw:
+        return "官方查無（興櫃、未掛牌或已下市）"
+    return "官方檔缺漏（未取得，不判定）"
