@@ -177,8 +177,27 @@ def test_precheck_end_to_end():
     assert "持有日與報酬由框架計算" in fails2
 
 
+@need_bt
+def test_r52_event_period_after_announcement():
+    """退回-52：038 凱碩 8059 買回期間晚於公告一年，占量用到未來成交量 → 必須擋下。"""
+    import pandas as pd
+    from framework import stats
+    from framework.ledger import trade_row
+    from checks.precheck import run
+    stats.load(BT_PATH)
+    cal = weekday_cal(n=500)
+    r = trade_row(cal, None, trade_id="8059-1", combo="T1", is_etest=False, symbol="8059", direction="short",
+                  info_time=f"{cal.days[10]} 14:30", entry_time=f"{cal.days[11]} 09:00", entry_date=cal.days[11],
+                  entry_session="open", entry_px=50, exit_date=cal.days[20], exit_session="close", exit_px=48,
+                  actions=[], announce_date=str(cal.days[10]), event_start=str(cal.days[260]),
+                  feature_end=str(cal.days[300]), price_series_hash="x")
+    res = run(pd.DataFrame([r]))
+    lv = {item: lvl for lvl, item, _ in res}
+    assert lv["訊號所用資料不晚於訊號日"] == "FAIL"
+    assert lv["事件期間起點晚於公告日 60 天以上"] == "WARN"
+
+
 PENDING = {
-    "退回-52": "038 買回期間晚於公告：DATA（事件期間攔截，待事件表）",
     "退回-57": "040 王道銀興櫃段殘留：真實資料版待市場別表（合成版已測）",
     "退回-04": "003 真實資料版待日K與官方漲跌停（合成版已測）",
     "退回-55": "055 美股 GGP／GM 不在台股資料層；以價格序列雜湊檢查覆蓋（合成版已測）",

@@ -85,6 +85,19 @@ def run(trades: pd.DataFrame, reported=None, split_path=None, report_text=None, 
         if (g > 1).any():
             add("WARN", "同日多筆但未指定聚合單位", f"{int((g > 1).sum())} 個進場日有 2 筆以上")
 
+    # 事件期間與訊號資料時點（B4，退回-52）：訊號所用資料的最後日期不得晚於訊號日；
+    # 事件期間起點晚於公告日 60 天以上要說明（例：買回期間晚於公告一年）
+    if "feature_end" in trades:
+        sig = pd.to_datetime(trades["info_time"].astype(str).str[:10])
+        late = trades[pd.to_datetime(trades["feature_end"]) > sig]
+        add("PASS" if late.empty else "FAIL", "訊號所用資料不晚於訊號日",
+            f"{len(late)} 筆用到訊號日後資料：{list(late['trade_id'][:10])}" if len(late) else "")
+    if {"event_start", "announce_date"} <= set(trades.columns):
+        gap = (pd.to_datetime(trades["event_start"]) - pd.to_datetime(trades["announce_date"])).dt.days
+        far = trades[gap > 60]
+        if len(far):
+            add("WARN", "事件期間起點晚於公告日 60 天以上", f"{len(far)} 筆：{list(far['trade_id'][:10])}，須逐筆說明")
+
     # 斷言字眼
     if report_text:
         hits = [w for w in ASSERTIVE if w in report_text]
