@@ -146,10 +146,11 @@ def reductions() -> pd.DataFrame:
             losses = "loss" in reason.lower()
             inferred = (last / post) if (losses and last > 0 and post > 0) else None
             o = offk.get((r["stock_id"], pd.Timestamp(r["date"])))
-            if o is not None and o.per_k is not None:
+            if o is not None and pd.notna(o.per_k):
                 basis = "官方公告值"
-                ratio, cash = o.per_k / 1000.0, (o.refund or 0.0)
-                flag = None if not o.rights_sh else "減資後現金增資：認購權未處理，資料不足"
+                ratio, cash = o.per_k / 1000.0, (float(o.refund) if pd.notna(o.refund) else 0.0)
+                has_rights = pd.notna(o.rights_sh) and float(o.rights_sh) > 0
+                flag = "減資後現金增資：認購權未處理，資料不足" if has_rights else None
                 src = o.src
                 if flag:
                     ratio = cash = None

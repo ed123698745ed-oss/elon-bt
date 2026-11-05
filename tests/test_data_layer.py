@@ -95,9 +95,10 @@ def test_r36_zhongzhan_119_market_days():
 
 
 def test_r67_otc_period_before_transfer_kept():
-    """退回-67：工信 5521 1999-11-18 上櫃、2012-12-18 轉上市 → 轉上市前的合法上櫃期間保留。"""
+    """退回-67：工信 5521 1999-11-18 上櫃、2012-12-18 轉上市 → 轉上市前的合法上櫃期間保留。
+    FinMind 5521 行情自 2003-08-01 起（更早無資料），故主日K起點為 2003-08-01，且該段為上櫃。"""
     d = k(["5521"])
-    assert d["date"].min() == pd.Timestamp("1999-11-18")
+    assert d["date"].min() == pd.Timestamp("2003-08-01")
     assert set(d.loc[d["date"] < "2012-12-18", "market"]) == {"上櫃"}
     assert set(d.loc[d["date"] >= "2012-12-18", "market"]) == {"上市"}
     first5 = d[(d["date"] >= "2012-12-18")].head(5)

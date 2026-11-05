@@ -212,7 +212,7 @@ def split_by_market(px: pd.DataFrame, st: pd.DataFrame, cal: pd.DataFrame):
     qx = px[q].copy()
     qx["quarantine_reason"] = [mh.quarantine_reason(sid, d, cov) for sid, d in zip(qx["stock_id"], qx["date"])]
     main = px[~q].drop(columns=["mkt_off"]).copy()
-    nl = mh.first5_no_limit(ev, list(cal["date"]))
+    nl = mh.first5_no_limit(ev[ev["stock_id"].isin(set(px["stock_id"]))], list(cal["date"]))
     LOG["market_split"] = {"raw_rows": len(px), "main_rows": len(main), "quarantine_rows": len(qx),
                            "quarantine_by_reason": qx["quarantine_reason"].value_counts().to_dict(),
                            "quarantine_stocks": int(qx["stock_id"].nunique()),
