@@ -45,6 +45,9 @@ def tpex_jobs():
         url = f"https://www.tpex.org.tw/www/zh-tw/bulletin/{ep}?startDate={s}&endDate={y}/12/31&response=json"
         exp = s.replace("/", "")
         yield f"tpex_exright/{y}.json", ("GET", url, None), ("date_prefix", exp), y == t.year
+    for y in range(2013, t.year + 1):  # 櫃買減資恢復買賣參考價（含每仟股換發新股、每股退還股款；官方表 2013 起有資料）
+        url = f"https://www.tpex.org.tw/www/zh-tw/bulletin/revivt?startDate={y}/01/01&endDate={y}/12/31&response=json"
+        yield f"tpex_reduction/{y}.json", ("GET", url, None), ("date_prefix", f"{y}0101"), y == t.year
     for d in trading_days():
         if d < "2007-07-01":
             continue
@@ -61,6 +64,10 @@ def tpex_jobs():
 
 
 def twse_jobs():
+    t = date.today()
+    for y in range(2011, t.year + 1):  # 證交所減資恢復買賣參考價格（官方 2011-01-01 起提供）
+        url = f"https://www.twse.com.tw/rwd/zh/reducation/TWTAUU?startDate={y}0101&endDate={y}1231&response=json"
+        yield f"twse_reduction/{y}.json", ("GET", url, None), ("twse_range", f"{y}0101"), y == t.year
     for d in trading_days():
         if d < "2004-02-11":
             continue
@@ -101,6 +108,9 @@ def check(j, rule):
         if "沒有符合" in st or "很抱歉" in st:
             return got in ("", exp), f"nodata {st}"
         return got == exp, got
+    if kind == "twse_range":
+        st = str(j.get("stat", ""))
+        return st == "OK" or "沒有符合" in st, f"{st} {j.get('date', '')} {str(j.get('fields', ''))[:200]}"
     if kind == "stock_month_twse":
         sid, y, m = exp
         got = str(j.get("date", ""))
