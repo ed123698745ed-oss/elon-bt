@@ -197,13 +197,5 @@ def test_r52_event_period_after_announcement():
     assert lv["事件期間起點晚於公告日 60 天以上"] == "WARN"
 
 
-PENDING = {
-    "退回-57": "040 王道銀興櫃段殘留：真實資料版待市場別表（合成版已測）",
-    "退回-04": "003 真實資料版待日K與官方漲跌停（合成版已測）",
-    "退回-55": "055 美股 GGP／GM 不在台股資料層；以價格序列雜湊檢查覆蓋（合成版已測）",
-}
-
-
-@pytest.mark.parametrize("case", sorted(PENDING))
-def test_pending(case):
-    pytest.skip(PENDING[case])
+# 退回-57、退回-04 的真實資料版在 tests/test_data_layer.py；
+# 退回-55（美股 GGP／GM 同序列）不在台股資料層，以 test_precheck_end_to_end 的價格序列雜湊檢查覆蓋。

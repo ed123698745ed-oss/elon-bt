@@ -75,3 +75,15 @@ def test_insufficient_action_excludes_trade():
                     entry_session="open", entry_px=33, exit_date="2024-07-05", exit_session="close", exit_px=34,
                     actions=acts)
     assert row["ret"] is None and "資料不足" in row["excluded_reason"]
+
+
+def test_r04_real_one_price_limit_up_not_filled():
+    """退回-04 真實資料：找一天一價鎖漲停（開高低收皆為漲停價），開盤買進必須不成交。"""
+    from framework.market import judge_fill
+    d = pd.read_parquet(os.path.join(OUT, "daily_k.parquet"), filters=[("stock_id", "in", ["3260", "2603", "6147", "3105"])],
+                        columns=["date", "stock_id", "open", "high", "low", "close", "volume", "limit_up", "limit_down"])
+    locked = d[(d["open"] == d["high"]) & (d["high"] == d["low"]) & (d["low"] == d["close"]) & (d["close"] == d["limit_up"])]
+    assert len(locked) > 0
+    bar = locked.iloc[0].to_dict()
+    f = judge_fill(bar, "long", "entry", "open")
+    assert not f.ok and "一價鎖漲停" in f.reason
