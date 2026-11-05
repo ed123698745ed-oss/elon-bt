@@ -1,0 +1,26 @@
+name: probe
+# 單次探測：從 Actions 打 jobs/probe_urls.txt 內的官方網址，原樣存回 Release raw-market/probe.tar.gz
+on:
+  push:
+    paths: ["jobs/probe_urls.txt"]
+permissions: { contents: write }
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: probe
+        run: |
+          mkdir -p probe; i=0
+          while read -r url; do
+            [ -z "$url" ] && continue; i=$((i+1))
+            code=$(curl -s -m 60 -A "Mozilla/5.0 (elon-bt research)" -o probe/$i.json -w "%{http_code}" "$url")
+            echo "$i $code $(wc -c < probe/$i.json) $url" | tee -a probe/_index.txt
+            sleep 3
+          done < jobs/probe_urls.txt
+          tar czf probe.tar.gz probe
+          gh release view raw-market >/dev/null 2>&1 || gh release create raw-market --title raw-market --notes "逐日市場別原始檔" --prerelease
+          gh release upload raw-market probe.tar.gz --clobber
