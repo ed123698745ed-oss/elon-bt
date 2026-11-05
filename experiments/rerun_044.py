@@ -4,7 +4,11 @@
 - 報酬：固定股數＋實得現金（研究預設口徑 V03，Ed 2026-11-03 定案）；原快篩用 V02 參考價比例連乘。
 - 訊號分數：同樣以固定股數＋現金計 TR(S)/TR(S−5)。
 - 資料：data-20261105（興櫃段剔除、官方除權息漲跌停、公司行動表、跳動旗標）。
-- 母體：官方上市櫃期間、身分已驗證；排除 00 開頭（ETF）與 91 開頭（存託憑證）。
+- 母體：當日在官方上市或上櫃（資料層主日K；興櫃、未證實身分列已移到隔離檔）；排除 00 開頭（ETF）與 91 開頭（存託憑證）。
+  （退回-67 起不再用「現行掛牌日起」判定：轉上市前的合法上櫃期間納入，初次掛牌前五日無漲跌幅不判觸限。）
+- 成交：依策略卡 V01（不呼叫通用 judge_fill）——進場日開盤價等於漲停或跌停價即取消（不分方向）；
+  出場日收盤做多碰跌停、放空碰漲停即順延到下一個不觸限且有成交的交易日。卡片規則比通用判定嚴格：
+  通用 judge_fill 對「收在限價」放行並標「排隊未驗證」，044 卡片則直接取消／順延。無漲跌幅日限價為空，不會觸限。
 - 訊號窗或持有期間碰到跳動、資料不足的公司行動 → 該部位未完成，所屬批次不列主統計（與原快篩相同處理）。
 """
 from __future__ import annotations
@@ -23,7 +27,7 @@ from framework.core import Calendar, actions_from_table, trade_return  # noqa: E
 
 OUT = os.environ.get("ELON_OUT", "/home/claude/raw_dl/out")
 BT = os.environ.get("BT_STATS_PATH", "/home/claude/vendor/bt_stats_v1.0.py")
-RES = os.environ.get("RES_DIR", "/home/claude/rerun044")
+RES = os.environ.get("RES_DIR", "/home/claude/rerun044_new")
 LAST_S = date(2026, 10, 22)
 
 
@@ -34,8 +38,7 @@ def main():
     st = pd.read_parquet(f"{OUT}/status.parquet")
     cols = ["date", "stock_id", "open", "close", "amount", "limit_up", "limit_down", "no_trade", "jump_flag"]
     dk = pd.read_parquet(f"{OUT}/daily_k.parquet", columns=cols)
-    ok_id = st[(st["verified"]) & ~st["stock_id"].str[:2].isin(["00", "91"])]
-    dk = dk[dk["stock_id"].isin(set(ok_id["stock_id"]))]
+    dk = dk[~dk["stock_id"].str[:2].isin(["00", "91"])]
     dk["date"] = dk["date"].dt.date
     days = [d for d in cal.days if d <= date(2026, 11, 4)]
     idx = {d: i for i, d in enumerate(days)}
@@ -52,8 +55,6 @@ def main():
     NT = wide("no_trade", 1.0) > 0           # 無資料或無成交＝不可成交
     JP = wide("jump_flag", 0.0) > 0
     AMT[NT] = 0.0
-    start = pd.to_datetime(ok_id.set_index("stock_id")["start_date"]).dt.date.to_dict()
-    end = pd.to_datetime(ok_id.set_index("stock_id")["end_date"]).dt.date.to_dict()
     ca = pd.read_parquet(f"{OUT}/corp_actions.parquet")
     ca = ca[ca["stock_id"].isin(col)]
     acts = {s: actions_from_table(g, s) for s, g in ca.groupby("stock_id")}
@@ -74,8 +75,6 @@ def main():
         cand = []
         for jj in np.where(elig)[0]:
             s = ids[jj]
-            if not (start.get(s) and start[s] <= S and (pd.isna(end.get(s)) or S <= end[s])):
-                continue
             if JP[j5 + 1:i + 1, jj].any():
                 continue
             if any(days[j5] < x <= S for x in bad_act.get(s, [])):
