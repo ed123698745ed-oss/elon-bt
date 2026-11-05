@@ -275,6 +275,15 @@ def build_daily(px: pd.DataFrame, ex: pd.DataFrame, ca: pd.DataFrame | None = No
     px = px.merge(jumps, on=["stock_id", "date"], how="left")
     px["jump_flag"] = px["jump_flag"].fillna(False).astype(bool)
     px["jump_reason"] = px["jump_flag"].map({True: "超出漲跌停且查無公司行動", False: None})
+    # 前一成交日距今超過 5 個市場交易日：多為中間行情缺漏或停牌（例：FinMind 櫃買 2007-04-23 前僅約 10 檔有逐日行情），
+    # 仍標跳動（持有期間碰到者不得算報酬），但另註原因，避免誤讀為單日資料錯誤
+    ci = {d: i for i, d in enumerate(sorted(pd.to_datetime(LOG.get("_cal_days", []))))}
+    if ci:
+        gap = [ci.get(d, -1) - ci.get(p, -1) if pd.notna(p) else -1 for d, p in zip(px["date"], px["prev_date"])]
+        px["prev_gap_days"] = gap
+        long_gap = px["jump_flag"] & (px["prev_gap_days"] > 5)
+        px.loc[long_gap, "jump_reason"] = "超出漲跌停且查無公司行動；前一成交日距今超過 5 個交易日（中間缺行情或停牌）"
+        LOG["daily_k"]["jump_long_gap_rows"] = int(long_gap.sum())
     LOG["daily_k"].update(rows=len(px), official_limit_rows=int((px["limit_src"] == "官方除權息表").sum()),
                           limit_src=px["limit_src"].value_counts().to_dict(), jump_rows=int(px["jump_flag"].sum()))
     return px.drop(columns=["ref_off", "up_off", "dn_off", "prev_date"])
@@ -295,6 +304,7 @@ def main():
     ex = official_exright()
     cal = build_calendar(px)
     ca = corp_actions.build(ex, LOG)
+    LOG["_cal_days"] = [str(d)[:10] for d in cal["date"]]
     main, qx, ev, nl = split_by_market(px, st, cal)
     dk = build_daily(main, ex, ca, nl)
     dk["stock_id"] = dk["stock_id"].astype(str)
@@ -308,6 +318,7 @@ def main():
         man["files"][name] = {"rows": len(df), "sha256": sha(p)}
     status_p = os.path.join(RAW, "_status_finmind.json")
     man["finmind_status"] = json.load(open(status_p)) if os.path.exists(status_p) else None
+    LOG.pop("_cal_days", None)
     json.dump(LOG, open(os.path.join(OUT, "build_log.json"), "w"), ensure_ascii=False, indent=1, default=str)
     json.dump(man, open(os.path.join(OUT, "manifest.json"), "w"), ensure_ascii=False, indent=1)
     print(json.dumps(man, ensure_ascii=False, indent=1))

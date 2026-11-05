@@ -1,0 +1,25 @@
+{
+ "old_jumps": 7095,
+ "new_jumps": 4917,
+ "old_jump_verdicts": {
+  "仍為跳動": 4840,
+  "移出主日K：官方查無（興櫃、未掛牌或已下市）": 1166,
+  "改判：官方除權息表界線內（含櫃買 2000～2010 補表）": 583,
+  "改判：無漲跌幅（初次掛牌前五日）": 412,
+  "移出主日K：證交所 2004-02-11 前無官方逐日資料（櫃買已查無）；上市身分未證實": 46,
+  "改判：待查（過渡期初次掛牌前五日）": 31,
+  "改判：其他（公司行動或前收修正）": 17
+ },
+ "new_jumps_not_in_old": 77,
+ "main_rows_old": 9584351,
+ "main_rows_new": 9683930,
+ "rows_added_to_main": 150695,
+ "stocks_with_rows_added": 146,
+ "rows_added_by_market": {
+  "上櫃": 148768,
+  "上市": 1927
+ },
+ "rows_removed_from_main": 51115,
+ "stocks_with_rows_removed": 80,
+ "stocks_affected_total": 808
+}

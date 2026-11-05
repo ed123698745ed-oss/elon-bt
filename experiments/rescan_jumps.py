@@ -40,19 +40,25 @@ def main():
     new_only.to_csv(f"{DST}/new_jumps.csv", index=False, encoding="utf-8-sig")
 
     od = pd.read_parquet(f"{OLD}/daily_k.parquet", columns=["date", "stock_id"])
-    key_o = set(zip(od["stock_id"], od["date"]))
-    add = n[[(s, d) not in key_o for s, d in zip(n["stock_id"], n["date"])]]
-    nd = set(zip(n["stock_id"], n["date"]))
-    gone = od[[(s, d) not in nd for s, d in zip(od["stock_id"], od["date"])]]
+    nk = n[["date", "stock_id", "market"]]
+    for df in (od, nk):
+        df["stock_id"] = df["stock_id"].astype("category")
+    cats = pd.api.types.union_categoricals([od["stock_id"], nk["stock_id"]]).categories
+    od["stock_id"] = od["stock_id"].cat.set_categories(cats)
+    nk = nk.assign(stock_id=nk["stock_id"].cat.set_categories(cats))
+    mm = od.merge(nk, on=["date", "stock_id"], how="outer", indicator=True)
+    add = mm[mm["_merge"] == "right_only"]
+    gone = mm[mm["_merge"] == "left_only"]
+    del mm
     summ = {
         "old_jumps": len(oj), "new_jumps": int(n["jump_flag"].sum()),
         "old_jump_verdicts": m["new_verdict"].value_counts().to_dict(),
         "new_jumps_not_in_old": len(new_only),
-        "main_rows_old": len(od), "main_rows_new": len(n),
-        "rows_added_to_main": len(add), "stocks_with_rows_added": int(add["stock_id"].nunique()),
+        "main_rows_old": len(od), "main_rows_new": len(nk),
+        "rows_added_to_main": len(add), "stocks_with_rows_added": int(add["stock_id"].astype(str).nunique()),
         "rows_added_by_market": add["market"].value_counts().to_dict(),
-        "rows_removed_from_main": len(gone), "stocks_with_rows_removed": int(gone["stock_id"].nunique()),
-        "stocks_affected_total": int(len(set(add["stock_id"]) | set(gone["stock_id"]) | set(m.loc[m["new_verdict"] != "仍為跳動", "stock_id"]) | set(new_only["stock_id"]))),
+        "rows_removed_from_main": len(gone), "stocks_with_rows_removed": int(gone["stock_id"].astype(str).nunique()),
+        "stocks_affected_total": int(len(set(add["stock_id"].astype(str)) | set(gone["stock_id"].astype(str)) | set(m.loc[m["new_verdict"] != "仍為跳動", "stock_id"].astype(str)) | set(new_only["stock_id"].astype(str)))),
     }
     json.dump(summ, open(f"{DST}/summary.json", "w"), ensure_ascii=False, indent=1, default=str)
     print(json.dumps(summ, ensure_ascii=False, indent=1, default=str))
