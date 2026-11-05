@@ -19,13 +19,15 @@ def weekday_cal(start="2023-01-02", n=400, holidays=()):
 
 
 def test_r13_capital_reduction_fixed_shares():
-    """退回-13：1512 瑞利跨減資。價格直接相除得 +129.17%，固定股數應約 −17.4%。"""
-    entry, exit_ = 5.8, 5.8 * 2.2917
+    """退回-13 原案（Eve 第一期審查引述）：1512 瑞利進場 6、出場 13.75、減資換股比 0.3603560129。
+    價格直接相除 +129.1667%；固定股數 13.75×0.3603560129÷6−1＝−17.4184%（交件曾列 −17.3%，係用反推換股比）。"""
+    entry, exit_, ratio = 6.0, 13.75, 0.3603560129
     naive = exit_ / entry - 1
-    act = Action(date(2023, 3, 13), "減資", share_ratio=5.8 / 16.09, source="FinMind CapitalReductionReferencePrice 1512")
+    act = Action(date(2023, 3, 13), "減資", share_ratio=ratio, source="原案換股比")
     r = trade_return("long", entry, exit_, "2023-02-01", "2023-04-10", [act]).ret
-    assert naive == pytest.approx(1.2917, abs=1e-4)
-    assert r == pytest.approx(-0.174, abs=0.002)
+    assert round(naive * 100, 4) == 129.1667
+    assert r == pytest.approx(13.75 * ratio / 6 - 1, abs=1e-15)
+    assert round(r * 100, 4) == -17.4184
 
 
 def test_r38_cash_dividend_not_chained():
@@ -89,6 +91,20 @@ def test_r58_leading_zero():
     assert norm_id(81) == "0081" and norm_id(81.0) == "0081" and norm_id("0050") == "0050" and norm_id(2330) == "2330"
 
 
+def test_r58_ids_match_by_original_code():
+    """退回-58（Eve 補充）：0081、帶字母、非四碼代號須按原識別碼配對，不得截斷或改寫。"""
+    for raw, want in [("0081", "0081"), ("00981A", "00981A"), ("00690", "00690"), ("2330", "2330"),
+                      (" 6488 ", "6488"), ("1256", "1256"), ("01006T", "01006T"), ("2888A", "2888A")]:
+        assert norm_id(raw) == want
+    events = [81, "00981A", "690"]                       # 事件表誤讀成數字或去零
+    prices = {"0081": 1, "00981A": 2, "0690": 3, "00690": 4}
+    got = [prices.get(norm_id(x)) for x in events]
+    assert got[0] == 1 and got[1] == 2
+    assert got[2] == 3 and got[2] != prices["00690"]       # 3 碼數字只補到 4 碼；5 碼 ETF 不可由去零代號還原 → 須以原字串讀入
+    with pytest.raises(ValueError):
+        norm_id(81.5)
+
+
 def test_split_freeze_and_tamper():
     """D5～D7：隔離帶不得短於最長持有；凍結後改切點會被擋下。"""
     cal = weekday_cal(n=600)
@@ -111,7 +127,8 @@ need_bt = pytest.mark.skipif(not os.path.exists(BT_PATH), reason="需要 Drive �
 
 @need_bt
 def test_r14_float_residual_not_counted_as_win():
-    """退回-14：浮點殘值（±1e-16）被算成勝負。經 bt_stats 視為 0，不算勝。"""
+    """退回-14 機制測試（合成資料，非原案重現）：浮點殘值（±1e-16）被算成勝負。經 bt_stats 視為 0，不算勝。
+    原案 015 V03 R01 勝率 61.76%→60.294118%（41/68）的逐筆重現另列待補（明細檔 21MB，尚未取得）。"""
     from framework import stats
     bt = stats.load(BT_PATH)
     r = [0.01, -0.01, 1e-16, -1e-16, 0.02]

@@ -78,8 +78,9 @@ def twse_jobs():
         k = d.replace("-", "")
         url = f"https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date={k}&type=ALLBUT0999&response=json"
         yield f"twse_daily/{d[:4]}/{d}.json", ("GET", url, None), ("date_eq", k), False
-    for sid, ym in need_months():
-        if ym >= "2004-02":
+    cal_months = [("1101", f"{y}-{m:02d}") for y in range(1999, 2005) for m in range(1, 13) if f"{y}-{m:02d}" < "2004-03"]
+    for sid, ym in cal_months + need_months():  # 1101 台泥 1999-01～2004-02 全月：2004-02-11 前的官方交易日曆核對用
+        if ym >= "2004-03":
             continue
         y, m = ym.split("-")
         url = f"https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY?date={y}{m}01&stockNo={sid}&response=json"

@@ -11,12 +11,6 @@ def k(ids):
     return pd.read_parquet(os.path.join(OUT, "daily_k.parquet"), filters=[("stock_id", "in", ids)])
 
 
-def test_r57_wangdao_emerging_rows_removed():
-    """退回-57：王道銀 2897 官方上市日 2017-05-05 前的興櫃段（2006-12～2017-04）必須剔除。"""
-    d = k(["2897"])
-    assert d["date"].min() == pd.Timestamp("2017-05-05")
-
-
 def test_a10_official_exright_limits_used():
     """A10、B6：除權息日參考價與漲跌停用官方值（台泥 2024-07-01：參考價 33.2、漲停 36.5、跌停 29.9）。"""
     r = k(["1101"]).set_index("date").loc["2024-07-01"]
@@ -40,7 +34,7 @@ def ca_rows():
 
 def test_r13_1512_real_capital_reduction():
     """退回-13 真實資料：1512 瑞利 2023-03-01 收盤 5.8 進、2023-05-03 收盤 13.30 出。
-    價格直接相除 +129%；固定股數（減資換股比 5.8/16.09）約 −17.3%（審查報告：應約 −17.4%）。"""
+    換股比只用證交所減資表公告值（不用 5.8/16.09 反推）；資料層未取得官方值時本測試應失敗而非放行。"""
     from framework.core import actions_from_table, trade_return
     d = k(["1512"]).set_index("date")
     e, x = d.loc["2023-03-01", "close"], d.loc["2023-05-03", "close"]
@@ -87,3 +81,55 @@ def test_r04_real_one_price_limit_up_not_filled():
     bar = locked.iloc[0].to_dict()
     f = judge_fill(bar, "long", "entry", "open")
     assert not f.ok and "一價鎖漲停" in f.reason
+
+
+# ---------------------------------------------------------------- 退回-67（Eve 第一期審查）真實資料
+def test_r36_zhongzhan_119_market_days():
+    """退回-36 原案：中湛 6236 2011-06-27 進、2011-12-12 出＝119 個市場日（舊做法數個股有效日 K 得 40）。"""
+    from framework.core import Calendar
+    cal = Calendar(pd.read_parquet(os.path.join(OUT, "calendar.parquet"))["date"].dt.date)
+    assert cal.hold_days("2011-06-27", "2011-12-12") == 119
+    d = k(["6236"])
+    rows = d[(d["date"] >= "2011-06-27") & (d["date"] <= "2011-12-12") & ~d["no_trade"]]
+    assert len(rows) == 40
+
+
+def test_r67_otc_period_before_transfer_kept():
+    """退回-67：工信 5521 1999-11-18 上櫃、2012-12-18 轉上市 → 轉上市前的合法上櫃期間保留。"""
+    d = k(["5521"])
+    assert d["date"].min() == pd.Timestamp("1999-11-18")
+    assert set(d.loc[d["date"] < "2012-12-18", "market"]) == {"上櫃"}
+    assert set(d.loc[d["date"] >= "2012-12-18", "market"]) == {"上市"}
+
+
+def test_r57_wangdao_emerging_still_excluded():
+    d = k(["2897"])
+    assert d["date"].min() == pd.Timestamp("2017-05-05")
+
+
+def test_r67_emerging_row_quarantined():
+    """清惠 5259 2012-02-10 為興櫃 → 不在主日K，在隔離檔且原因為官方查無。"""
+    assert not (k(["5259"])["date"] == "2012-02-10").any()
+    q = pd.read_parquet(os.path.join(OUT, "daily_k_quarantine.parquet"), filters=[("stock_id", "in", ["5259"])])
+    r = q[q["date"] == "2012-02-10"]
+    assert len(r) == 1 and r.iloc[0]["quarantine_reason"].startswith("官方查無")
+
+
+@pytest.mark.parametrize("sid,day", [("4728", "2012-01-12"), ("6821", "2023-05-23"), ("6913", "2024-10-04"), ("1776", "2016-05-10")])
+def test_r67_first5_no_limit_not_jump(sid, day):
+    r = k([sid]).set_index("date").loc[day]
+    assert r["limit_src"] == "無漲跌幅（初次掛牌前五日）" and pd.isna(r["limit_up"]) and not bool(r["jump_flag"])
+
+
+@pytest.mark.parametrize("sid,day,ref,up,dn", [("8938", "2003-07-31", 104.19, 111.0, 97.0), ("4126", "2004-09-02", 19.49, 20.80, 18.20)])
+def test_r67_tpex_early_exright_official(sid, day, ref, up, dn):
+    r = k([sid]).set_index("date").loc[day]
+    assert (r["ref_price"], r["limit_up"], r["limit_down"], r["limit_src"]) == (ref, up, dn, "官方除權息表")
+    assert not bool(r["jump_flag"])
+
+
+def test_r67_inferred_ratios_not_in_share_ratio():
+    """A5：反推換股比只在 share_ratio_inferred，share_ratio 必為官方公告值或空。"""
+    c = ca_rows()
+    red = c[c["kind"].isin(["減資", "面額變更"])]
+    assert red.loc[red["ratio_basis"] != "官方公告值", "share_ratio"].isna().all()

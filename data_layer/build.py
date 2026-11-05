@@ -25,6 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from framework.elon_tools import limit_prices  # noqa: E402
 from data_layer import corp_actions  # noqa: E402
 from data_layer import market_history as mh  # noqa: E402
+from data_layer import calendar_check  # noqa: E402
 
 RAW = os.environ.get("RAW_DIR", "raw")
 OUT = os.environ.get("OUT_DIR", "out")
@@ -295,7 +296,8 @@ def main():
     dk = build_daily(main, ex, ca, nl)
     dk["stock_id"] = dk["stock_id"].astype(str)
     files = {"calendar.parquet": cal, "status.parquet": st, "daily_k.parquet": dk, "official_exright.parquet": ex,
-             "corp_actions.parquet": ca, "daily_k_quarantine.parquet": qx, "market_segments.parquet": ev}
+             "corp_actions.parquet": ca, "daily_k_quarantine.parquet": qx, "market_segments.parquet": ev,
+             "calendar_check.parquet": calendar_check.check(cal, LOG)}
     man = {"built_at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "raw_dir": RAW, "files": {}}
     for name, df in files.items():
         p = os.path.join(OUT, name)
