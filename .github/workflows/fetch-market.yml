@@ -1,0 +1,45 @@
+name: fetch-market
+# 退回-67：逐日市場別（櫃買／證交所官方每日行情與個股月成交）＋櫃買歷史除權息。
+# 官方來源，不受 FinMind 夜間時段限制。可續傳，進度存 Release「raw-market」。
+on:
+  push:
+    paths: ["jobs/market.txt"]
+  schedule:
+    - cron: "17 */2 * * *"
+  workflow_dispatch:
+permissions: { contents: write }
+jobs:
+  fetch:
+    strategy:
+      fail-fast: false
+      matrix: { src: [tpex, twse] }
+    concurrency: { group: fetch-market-${{ matrix.src }}, cancel-in-progress: false }
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: restore
+        run: |
+          gh release view raw-market >/dev/null 2>&1 || gh release create raw-market --title raw-market --notes "逐日市場別與櫃買歷史除權息原始檔（自動更新）" --prerelease || true
+          gh release download raw-market -p market-${{ matrix.src }}.tar.gz || true
+          [ -f market-${{ matrix.src }}.tar.gz ] && tar xzf market-${{ matrix.src }}.tar.gz || mkdir -p raw
+          if [ -f raw/_market_${{ matrix.src }}_complete ]; then echo "COMPLETE=1" >> $GITHUB_ENV; fi
+      - name: fetch
+        if: env.COMPLETE != '1'
+        run: BUDGET_MIN=320 GAP=${{ matrix.src == 'twse' && '3' || '1.5' }} python data_layer/fetch_market.py ${{ matrix.src }}
+      - name: save
+        if: always() && env.COMPLETE != '1'
+        run: |
+          tar czf market-${{ matrix.src }}.tar.gz raw
+          sha256sum market-${{ matrix.src }}.tar.gz | tee market-${{ matrix.src }}.sha256
+          python - <<'EOF'
+          import csv, collections, json, sys
+          src = "${{ matrix.src }}"
+          rows = list(csv.DictReader(open(f"raw/_attempts_market_{src}.csv")))
+          c = collections.Counter(r["result"] for r in rows)
+          json.dump({"src": src, "attempts": len(rows), "by_result": c}, open(f"_status_market_{src}.json", "w"), ensure_ascii=False)
+          print(c)
+          EOF
+          gh release upload raw-market market-${{ matrix.src }}.tar.gz market-${{ matrix.src }}.sha256 _status_market_${{ matrix.src }}.json raw/_attempts_market_${{ matrix.src }}.csv --clobber
