@@ -13,7 +13,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix: { src: [tpex, twse] }
-    concurrency: { group: fetch-market-${{ matrix.src }}, cancel-in-progress: false }
+    concurrency:
+      group: fetch-market-${{ matrix.src }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 350
     env:
@@ -34,12 +36,5 @@ jobs:
         run: |
           tar czf market-${{ matrix.src }}.tar.gz raw
           sha256sum market-${{ matrix.src }}.tar.gz | tee market-${{ matrix.src }}.sha256
-          python - <<'EOF'
-          import csv, collections, json, sys
-          src = "${{ matrix.src }}"
-          rows = list(csv.DictReader(open(f"raw/_attempts_market_{src}.csv")))
-          c = collections.Counter(r["result"] for r in rows)
-          json.dump({"src": src, "attempts": len(rows), "by_result": c}, open(f"_status_market_{src}.json", "w"), ensure_ascii=False)
-          print(c)
-          EOF
+          python data_layer/market_status.py ${{ matrix.src }}
           gh release upload raw-market market-${{ matrix.src }}.tar.gz market-${{ matrix.src }}.sha256 _status_market_${{ matrix.src }}.json raw/_attempts_market_${{ matrix.src }}.csv --clobber
