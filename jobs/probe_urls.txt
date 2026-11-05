@@ -1,6 +1,8 @@
-https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date=20121218&type=ALLBUT0999&response=json
-https://www.twse.com.tw/rwd/zh/reducation/TWTAUU?startDate=20210101&endDate=20211231&response=json
-https://www.twse.com.tw/rwd/zh/split/TWTCAU?startDate=20250101&endDate=20251231&response=json
-https://www.twse.com.tw/rwd/zh/change/TWTB8U?startDate=20220101&endDate=20221231&response=json
-https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY?date=19990101&stockNo=1101&response=json
-https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date=20040211&type=ALLBUT0999&response=json
+https://www.twse.com.tw/rwd/zh/reducation/TWTAVUDetail?STK_NO=2505&FILE_DATE=20201223&response=json
+https://www.twse.com.tw/rwd/zh/reducation/TWTAUUDetail?STK_NO=2505&FILE_DATE=20201223&response=json
+https://www.twse.com.tw/rwd/zh/reducation/TWTAVUDetail?STK_NO=6243&FILE_DATE=20211025&response=json
+https://www.twse.com.tw/rwd/zh/change/TWTB8UDetail?STK_NO=6415&FILE_DATE=20220706&RESUME_DATE=20220713&response=json
+https://www.twse.com.tw/rwd/zh/split/TWTCAUDetail?STK_NO=0050&response=json
+https://www.twse.com.tw/zh/announcement/reduction/twtavu-detail2.html
+https://www.twse.com.tw/rwd/zh/reducation/TWTAUU?startDate=20211101&endDate=20211130&response=json
+https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date=20040210&type=ALLBUT0999&response=json
