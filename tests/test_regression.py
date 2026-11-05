@@ -227,3 +227,23 @@ def test_r38_original_case_8072_cash_reduction():
     assert r == pytest.approx(22.85 * 0.8 / 20.05 + 2 / 20.05 - 1, abs=1e-15)
     assert round(r * 100, 6) == 1.147132
     assert abs(r - 0.00769) > 0.003
+
+
+def test_r14_original_case_reproduced():
+    """退回-14 原案重現：015 V03 台灣50 刪除股 D−1／H10 共 68 筆（Drive《015_V03_階段結果_台灣50.xlsx》逐筆明細，
+    sha256 3d96d355…abb846，固定輸入存 tests/fixtures_r67/r14_015_tw50_del_Dm1_H10.csv）。
+    直接以 >0 判勝：41/68＝60.294118%（寶成 9904 2020-06-18 的 +4.44e-16 被算勝）；
+    經 bt_stats（|r|<1e-9 視為 0）：40/68＝58.823529%、R＝1.445375273（與 Eve 診斷值一致）。"""
+    import os
+    import pandas as pd
+    if not os.path.exists(BT_PATH):
+        pytest.skip("bt_stats 不在此環境")
+    from framework import stats
+    bt = stats.load(BT_PATH)
+    g = pd.read_csv(os.path.join(os.path.dirname(__file__), "fixtures_r67", "r14_015_tw50_del_Dm1_H10.csv"), dtype={"代號": str})
+    r = g["含息報酬"].astype(float).tolist()
+    assert len(r) == 68
+    assert round(sum(x > 0 for x in r) / 68 * 100, 6) == 60.294118
+    s = bt.summarize(r)
+    assert round(s["勝率"] * 100, 6) == 58.823529
+    assert round(s["賠率R"], 9) == 1.445375273
