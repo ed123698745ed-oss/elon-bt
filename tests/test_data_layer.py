@@ -100,6 +100,8 @@ def test_r67_otc_period_before_transfer_kept():
     assert d["date"].min() == pd.Timestamp("1999-11-18")
     assert set(d.loc[d["date"] < "2012-12-18", "market"]) == {"上櫃"}
     assert set(d.loc[d["date"] >= "2012-12-18", "market"]) == {"上市"}
+    first5 = d[(d["date"] >= "2012-12-18")].head(5)
+    assert not first5["limit_src"].str.startswith(("無漲跌幅", "待查")).any()   # 轉上市不是初次掛牌，照常有漲跌幅
 
 
 def test_r57_wangdao_emerging_still_excluded():
