@@ -1,0 +1,56 @@
+name: build-phase2
+# 第二期共用資料層候選標籤：由 Release「raw-phase2」的官方原始檔建置 index_daily、surveillance、margin_flags、downtick_list、fulldelivery。
+# 標籤由 jobs/phase2_build.txt 的 tag= 指定；已存在就停止（不覆蓋）。任一來源未完成下載就停止，不發布不完整版本。
+on:
+  push:
+    paths: ["jobs/phase2_build.txt"]
+  workflow_dispatch:
+permissions: { contents: write }
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install pandas pyarrow pytest
+      - name: get raw
+        run: |
+          mkdir -p p2 && cd p2
+          gh release download raw-phase2 -p 'p2-*.tar.gz' -p 'p2-*.sha256'
+          for s in twse_tri twse_ix tpex_ix twse_punish twse_notice tpex_disposal tpex_attention twse_margin tpex_margin twse_mark tpex_mark twse_fulldelivery; do
+            sha256sum -c p2-$s.sha256 || { echo "雜湊不符 $s"; exit 1; }
+            tar xzf p2-$s.tar.gz
+            [ -f raw/_phase2_${s}_complete ] || { echo "來源未完成下載：$s，停止"; exit 1; }
+          done
+          cat p2-*.sha256 > ../raw_sha256.txt
+      - name: build
+        run: CAL=jobs/trading_days.txt RAW=p2/raw OUT=out python data_layer/build_phase2.py | tee out_build.txt
+      - name: tests
+        run: |
+          set +e
+          P2_OUT=out CAL=jobs/trading_days.txt python -m pytest -q -rA tests/test_phase2.py > out/test_output.txt 2>&1
+          echo "TEST_RC=$?" >> $GITHUB_ENV
+          tail -3 out/test_output.txt
+      - name: publish
+        run: |
+          export TAG=$(grep -o 'tag=[A-Za-z0-9._-]*' jobs/phase2_build.txt | tail -1 | cut -d= -f2)
+          [ -z "$TAG" ] && { echo "未指定 tag"; exit 1; }
+          if gh release view "$TAG" >/dev/null 2>&1; then echo "release $TAG 已存在，停止"; exit 1; fi
+          mv out_build.txt out/build_log.txt
+          python - <<'P'
+          import glob, hashlib, json, os
+          import pandas as pd
+          files = {}
+          for f in sorted(glob.glob("out/*.parquet")):
+              files[os.path.basename(f)] = {"rows": len(pd.read_parquet(f)), "sha256": hashlib.sha256(open(f, "rb").read()).hexdigest()}
+          m = {"data_tag": os.environ["TAG"], "code_commit": os.environ["GITHUB_SHA"], "files": files,
+               "raw_assets_sha256": open("raw_sha256.txt").read().split("\n"), "tests_exit_code": int(os.environ.get("TEST_RC", "-1")),
+               "calendar": "jobs/trading_days.txt", "note": "第二期候選標籤；Eve 驗收前不得供策略正式使用"}
+          json.dump(m, open("out/manifest.json", "w"), ensure_ascii=False, indent=1)
+          P
+          cp p2/p2-*.tar.gz out/
+          gh release create "$TAG" --prerelease --title "$TAG 第二期資料層（候選）" --notes "第二期候選：index_daily、surveillance、margin_flags、downtick_list、fulldelivery。清冊 manifest.json；建置輸出 build_log.txt；測試 test_output.txt；原始檔 p2-*.tar.gz（雜湊見 manifest）。Eve 驗收前不得供策略正式使用。" out/*
