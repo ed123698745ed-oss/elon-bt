@@ -172,7 +172,7 @@ def main(src):
         code, raw, res, got = 0, b"", "error", ""
         try:
             req = urllib.request.Request(url, data=body, headers=UA, method=method)
-            raw = urllib.request.urlopen(req, timeout=60).read()
+            raw = urllib.request.urlopen(req, timeout=180).read()
             code = 200
         except urllib.error.HTTPError as e:
             code = e.code
