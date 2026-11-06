@@ -1,0 +1,43 @@
+name: fetch-phase2
+# 第二期共用資料層：報酬指數、處置／注意、融資融券、平盤下放空名單（官方來源，不受 FinMind 時段限制）。
+# 可續傳，進度存 Release「raw-phase2」；每筆回應核對回傳日期與查詢一致。
+on:
+  push:
+    paths: ["jobs/phase2.txt"]
+  schedule:
+    - cron: "41 */2 * * *"
+  workflow_dispatch:
+permissions: { contents: write }
+jobs:
+  fetch:
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        src: [twse_tri, twse_ix, tpex_ix, twse_punish, twse_notice, tpex_disposal, tpex_attention, twse_margin, tpex_margin, twse_mark, tpex_mark]
+    concurrency:
+      group: fetch-phase2-${{ matrix.src }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: restore
+        run: |
+          gh release view raw-phase2 >/dev/null 2>&1 || gh release create raw-phase2 --title raw-phase2 --notes "第二期共用資料層官方原始檔（自動更新）" --prerelease || true
+          gh release download raw-phase2 -p p2-${{ matrix.src }}.tar.gz || true
+          [ -f p2-${{ matrix.src }}.tar.gz ] && tar xzf p2-${{ matrix.src }}.tar.gz || mkdir -p raw
+          if [ -f raw/_phase2_${{ matrix.src }}_complete ] && [ "${{ github.event_name }}" != "push" ]; then echo "COMPLETE=1" >> $GITHUB_ENV; fi
+          rm -f raw/_phase2_${{ matrix.src }}_complete
+      - name: fetch
+        if: env.COMPLETE != '1'
+        run: BUDGET_MIN=320 GAP=${{ startsWith(matrix.src, 'twse') && '3' || '1.5' }} python data_layer/fetch_phase2.py ${{ matrix.src }}
+      - name: save
+        if: always() && env.COMPLETE != '1'
+        run: |
+          n=$(ls raw/phase2/${{ matrix.src }} 2>/dev/null | wc -l); echo "files=$n"
+          tar czf p2-${{ matrix.src }}.tar.gz raw
+          sha256sum p2-${{ matrix.src }}.tar.gz | tee p2-${{ matrix.src }}.sha256
+          gh release upload raw-phase2 p2-${{ matrix.src }}.tar.gz p2-${{ matrix.src }}.sha256 raw/_attempts_phase2_${{ matrix.src }}.csv --clobber
