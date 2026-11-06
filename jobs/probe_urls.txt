@@ -1,3 +1,3 @@
-https://www.twse.com.tw/zh/trading/bfihbu.html
-https://www.twse.com.tw/zh/trading/twt85u.html
-https://www.twse.com.tw/zh/trading/twtawu.html
+https://www.twse.com.tw/rwd/zh/fullDelivery/TWT85U?date=20100104&response=json
+https://www.twse.com.tw/rwd/zh/fullDelivery/TWT85U?date=20040302&response=json
+https://www.twse.com.tw/rwd/zh/fullDelivery/BFIHBU?startDate=20190101&endDate=20191231&response=json
