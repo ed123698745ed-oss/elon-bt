@@ -59,7 +59,8 @@ def dividends() -> pd.DataFrame:
     d["ann_dt"] = pd.to_datetime(d["announced"].str[:10], errors="coerce")
     n0 = len(d)
     d = d[(d["ann_dt"].isna()) | (d["ann_dt"] <= d["ex_date"])]
-    d = d.sort_values("announced").groupby(["stock_id", "ex_date", "kind"], as_index=False).last()
+    # 退回-69：groupby().last() 會逐欄取最後非空值，可能把舊公告的欄位混進新公告；改為整列取最後一筆公告
+    d = d.sort_values("announced", kind="stable").drop_duplicates(["stock_id", "ex_date", "kind"], keep="last")
     d.attrs["dropped_post_ex_or_dup"] = n0 - len(d)
     return d.drop(columns=["ann_dt"])
 

@@ -22,7 +22,7 @@ from datetime import date, datetime, timezone
 import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from framework.elon_tools import limit_prices  # noqa: E402
+from framework.elon_tools import limit_prices, security_kind, next_base  # noqa: E402
 from data_layer import corp_actions  # noqa: E402
 from data_layer import market_history as mh  # noqa: E402
 from data_layer import calendar_check  # noqa: E402
@@ -227,6 +227,118 @@ def split_by_market(px: pd.DataFrame, st: pd.DataFrame, cal: pd.DataFrame):
     return main, qx.drop(columns=["mkt_off"]), seg.merge(ev[["stock_id", "start", "initial"]], on=["stock_id", "start"], how="left"), nl
 
 
+TPEX_STALE_DAYS = {pd.Timestamp("2008-10-13")}   # 櫃買 10-09 印出的「次日」漲跌停早於 10-12 公布的跌幅 3.5% 措施，當日改用規則
+
+
+def assign_limits(px: pd.DataFrame, ex: pd.DataFrame, ca: pd.DataFrame | None) -> pd.DataFrame:
+    """退回-69：漲跌停價來源依序為
+    ①初次掛牌前五日（無漲跌幅／待查）②官方除權息表 ③櫃買官方「次日漲停／跌停價」（2007-07 起；9995 以上＝官方無漲跌幅）
+    ④官方基準價鏈＋規則（證交所 MI_INDEX 2004-02-11 起、櫃買 2007-07 起：有收盤→收盤；無收盤依 2011-03-28 起買賣申報價原則）
+    ⑤減資／面額變更恢復日：官方減資參考價＋規則；查無官方參考價→缺參考價
+    ⑥官方逐日行情之前：前一交易日有成交→前收＋規則；前一交易日無成交或缺行情→待查（基準價未驗證）。
+    規則＝依日期的漲跌幅（含 3.5% 期間）與升降單位（2005-03-01 前舊表；ETF 另表）。"""
+    px = px.sort_values(["stock_id", "date"]).reset_index(drop=True)
+    cal = sorted(pd.to_datetime(LOG.get("_cal_days", [])))
+    ci = {d: i for i, d in enumerate(cal)}
+    # ⑤ 需要官方參考價的公司行動日
+    evd = set()
+    if ca is not None and len(ca):
+        e = ca[ca["kind"].isin(["減資", "面額變更"])]
+        evd = set(zip(e["stock_id"].astype(str), pd.to_datetime(e["ex_date"])))
+    rr = corp_actions.official_reductions()
+    rref = {}
+    for r in rr.itertuples():
+        try:
+            v = float(str(r.ref).replace(",", ""))
+            if v > 0:
+                rref[(r.stock_id, r.ex_date)] = v
+        except (TypeError, ValueError):
+            pass
+    exref = {(s_, d_): r_ for s_, d_, r_ in zip(ex["stock_id"], ex["date"], ex["ref"]) if pd.notna(r_)}
+    # ④ 官方基準價鏈
+    oq = pd.concat([mh.official_quotes("上市"), mh.official_quotes("上櫃")], ignore_index=True)
+    ids = set(px["stock_id"].astype(str).unique())
+    oq = oq[oq["stock_id"].isin(ids)].drop_duplicates(["stock_id", "date"]).sort_values(["stock_id", "date"])
+    bases = []
+    for sid, g in oq.groupby("stock_id", sort=False):
+        base = None
+        for d, c, b_, a_ in zip(g["date"], g["close_off"], g["bid"], g["ask"]):
+            k = (sid, d)
+            if k in exref:
+                base = exref[k]
+            elif k in evd:
+                base = rref.get(k)
+            bases.append(base)
+            base = next_base(base, c, b_, a_, d + pd.Timedelta(days=1))
+    oq = oq[["stock_id", "date"]].copy()
+    oq["chain_base"] = pd.array(bases, dtype="Float64")
+    oq["in_chain"] = True
+    del bases
+    LOG["daily_k"]["chain_rows"] = len(oq)
+    px = px.merge(oq, on=["stock_id", "date"], how="left")
+    del oq
+    # ③ 櫃買官方次日漲跌停
+    tpo = mh.tpex_official_limits()
+    tpo = tpo[~tpo["date"].isin(TPEX_STALE_DAYS) & tpo["stock_id"].isin(ids)][["stock_id", "date", "up", "dn"]]
+    px = px.merge(tpo.rename(columns={"up": "tp_up", "dn": "tp_dn"}).drop_duplicates(["stock_id", "date"]),
+                  on=["stock_id", "date"], how="left")
+    del tpo
+    # 前一成交日（判斷官方逐日行情之前，前一交易日是否有成交）
+    pdt = px["date"].where(~px["no_trade"]).groupby(px["stock_id"]).transform(lambda c: c.ffill().shift(1))
+    srcs, ups, dns, refs = [], [], [], []
+    for sid, d, nls, ro, uo, do, pc, pd_, inc, cb, tu, tn in zip(
+            px["stock_id"], px["date"], px["no_limit_status"], px["ref_off"], px["up_off"], px["dn_off"], px["prev_close"], pdt,
+            px["in_chain"].fillna(False).to_numpy(dtype=bool), px["chain_base"].to_numpy(dtype=float, na_value=float("nan")),
+            px["tp_up"].to_numpy(dtype=float, na_value=float("nan")), px["tp_dn"].to_numpy(dtype=float, na_value=float("nan"))):
+        kind = security_kind(sid)
+        k = (sid, d)
+        if nls is not None and nls == nls:
+            srcs.append("無漲跌幅（初次掛牌前五日）" if nls == "無漲跌幅" else "待查（過渡期初次掛牌前五日）")
+            ups.append(None); dns.append(None); refs.append(None)
+            continue
+        if uo == uo and uo is not None:
+            srcs.append("官方除權息表"); ups.append(uo); dns.append(do); refs.append(ro)
+            continue
+        if tu == tu:
+            u, n = tu, tn
+            if u >= 9990 and n <= 0.011:
+                srcs.append("無漲跌幅（櫃買官方）"); ups.append(None); dns.append(None); refs.append(None)
+            elif u <= 0 or n <= 0:
+                srcs.append("缺參考價"); ups.append(None); dns.append(None); refs.append(None)
+            else:
+                srcs.append("官方行情表（櫃買次日漲跌停）"); ups.append(u); dns.append(n); refs.append(None)
+            continue
+        if inc:
+            base = cb if cb == cb else None
+            if base is None:
+                srcs.append("缺參考價"); ups.append(None); dns.append(None); refs.append(None)
+            else:
+                u, n = limit_prices(base, d, kind)
+                srcs.append("規則（官方基準價鏈）"); ups.append(u); dns.append(n); refs.append(base)
+            continue
+        if k in evd:
+            v = rref.get(k)
+            if v is None:
+                srcs.append("缺參考價"); ups.append(None); dns.append(None); refs.append(None)
+            else:
+                u, n = limit_prices(v, d, kind)
+                srcs.append("官方減資參考價＋規則"); ups.append(u); dns.append(n); refs.append(v)
+            continue
+        if pc is None or pc != pc or pc <= 0:
+            srcs.append("缺參考價"); ups.append(None); dns.append(None); refs.append(None)
+            continue
+        if pd_ == pd_ and pd_ is not None and ci.get(d, -9) - ci.get(pd_, -99) == 1:
+            u, n = limit_prices(pc, d, kind)
+            srcs.append("規則"); ups.append(u); dns.append(n); refs.append(pc)
+        else:
+            srcs.append("待查（前一交易日無成交，基準價未驗證）"); ups.append(None); dns.append(None); refs.append(None)
+    px["limit_src"], px["limit_up"], px["limit_down"], px["ref_price"] = srcs, ups, dns, refs
+    px = px.drop(columns=["in_chain", "chain_base", "tp_up", "tp_dn"])
+    # 無成交日不需要限價判斷；保留來源但缺參考價只記在有成交日
+    LOG["daily_k"]["limit_src_detail"] = px["limit_src"].value_counts().to_dict()
+    return px
+
+
 def build_daily(px: pd.DataFrame, ex: pd.DataFrame, ca: pd.DataFrame | None = None, nl: pd.DataFrame | None = None) -> pd.DataFrame:
     LOG["daily_k"] = {"rows_in": len(px)}
     # FinMind 無成交日以 0 價列出：標 no_trade、OHLC 改為空值，前收取前一個有成交日的收盤
@@ -242,24 +354,8 @@ def build_daily(px: pd.DataFrame, ex: pd.DataFrame, ca: pd.DataFrame | None = No
         px = px.merge(nl, on=["stock_id", "date"], how="left")
     else:
         px["no_limit_status"], px["no_limit_src"] = None, None
-    px["ref_price"] = px["ref_off"].where(px["ref_off"].notna(), px["prev_close"])
-    # limit_status：官方除權息表／規則／無漲跌幅（初次掛牌前五日）／待查（過渡期）／缺參考價 —— 無限幅與缺限價分開
-    px["limit_src"] = "規則"
-    px.loc[px["up_off"].notna(), "limit_src"] = "官方除權息表"
-    ups, dns = [], []
-    for r, d, uo, do in zip(px["ref_price"], px["date"], px["up_off"], px["dn_off"]):
-        if pd.notna(uo):
-            ups.append(uo); dns.append(do)
-        elif pd.isna(r) or r <= 0:
-            ups.append(None); dns.append(None)
-        else:
-            u, dn = limit_prices(r, d)
-            ups.append(u); dns.append(dn)
-    px["limit_up"], px["limit_down"] = ups, dns
-    nolim = px["no_limit_status"].notna()
-    px.loc[nolim, ["limit_up", "limit_down"]] = None
-    px.loc[nolim, "limit_src"] = px.loc[nolim, "no_limit_status"].map(lambda x: "無漲跌幅（初次掛牌前五日）" if x == "無漲跌幅" else "待查（過渡期初次掛牌前五日）")
-    px.loc[~nolim & px["limit_up"].isna() & ~px["no_trade"], "limit_src"] = "缺參考價"
+    px = assign_limits(px, ex, ca)
+    nolim = px["no_limit_status"].notna() | px["limit_src"].str.startswith("無漲跌幅")
     # 跳動掃描：收盤超出漲跌停且「前一成交日之後到當日（含）」查無公司行動（含休市日除權息）；無限幅與待查日不判
     px["prev_date"] = px["date"].where(~px["no_trade"]).groupby(px["stock_id"]).transform(lambda c: c.ffill().shift(1))
     exk = ex[["stock_id", "date"]].copy()

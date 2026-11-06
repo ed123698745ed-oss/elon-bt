@@ -69,6 +69,74 @@ def _iter_days():
                     yield _code(r[i]), d, "上市", "TWSE MI_INDEX"
 
 
+def tpex_official_limits() -> pd.DataFrame:
+    """櫃買每日收盤行情的「次日漲停價／次日跌停價」（2007-07 起）→ 適用於下一個櫃買交易日。
+    9,999.95／0.01 為官方表示無漲跌幅（例：國外成分 ETF），回傳 no_limit=True。退回-69 新增。
+    逐日轉成小表再合併，控制記憶體。"""
+    files = sorted(glob.glob(f"{MK}/tpex_daily/*/*.json"))
+    parts = []
+    for f in files:
+        t = (json.load(open(f, encoding="utf-8")).get("tables") or [{}])[0]
+        fl = [x.strip() for x in t.get("fields") or []]
+        if "次日漲停價" not in fl:
+            continue
+        iu, idn = fl.index("次日漲停價"), fl.index("次日跌停價")
+        rows = [r for r in (t.get("data") or []) if r and len(r) > idn]
+        if not rows:
+            continue
+        p = pd.DataFrame({"stock_id": [_code(r[0]) for r in rows],
+                          "up": pd.to_numeric([str(r[iu]).replace(",", "") for r in rows], errors="coerce"),
+                          "dn": pd.to_numeric([str(r[idn]).replace(",", "") for r in rows], errors="coerce")})
+        p["file_date"] = _roc(t["date"])
+        parts.append(p.dropna(subset=["up", "dn"]))
+    df = pd.concat(parts, ignore_index=True)
+    df["stock_id"] = df["stock_id"].astype("category")
+    days = sorted(df["file_date"].unique())
+    df["date"] = df["file_date"].map(dict(zip(days, days[1:])))
+    df = df.dropna(subset=["date"])
+    df["no_limit"] = (df["up"] >= 9999) & (df["dn"] <= 0.011)
+    df["stock_id"] = df["stock_id"].astype(str)
+    return df[["stock_id", "date", "up", "dn", "no_limit", "file_date"]].reset_index(drop=True)
+
+
+def _num(v):
+    try:
+        x = float(str(v).replace(",", ""))
+        return x if x > 0 else float("nan")
+    except ValueError:
+        return float("nan")
+
+
+def official_quotes(market: str) -> pd.DataFrame:
+    """官方逐日收盤、收盤時最高買進／最低賣出申報價（用來決定次日基準）。上市：MI_INDEX（2004-02-11 起）；上櫃：每日收盤行情（2007-07 起）。"""
+    parts = []
+    if market == "上櫃":
+        for f in sorted(glob.glob(f"{MK}/tpex_daily/*/*.json")):
+            t = (json.load(open(f, encoding="utf-8")).get("tables") or [{}])[0]
+            fl = [x.strip() for x in t.get("fields") or []]
+            if "收盤" not in fl:
+                continue
+            ic, ib, ia = fl.index("收盤"), fl.index("最後買價"), fl.index("最後賣價")
+            rows = [r for r in t.get("data") or [] if r and len(r) > ia]
+            parts.append(pd.DataFrame({"stock_id": [_code(r[0]) for r in rows], "close_off": [_num(r[ic]) for r in rows],
+                                       "bid": [_num(r[ib]) for r in rows], "ask": [_num(r[ia]) for r in rows], "date": _roc(t["date"])}))
+    else:
+        for f in sorted(glob.glob(f"{MK}/twse_daily/*/*.json")):
+            j = json.load(open(f, encoding="utf-8"))
+            if str(j.get("stat", "")) != "OK":
+                continue
+            d = pd.Timestamp(f"{j['date'][:4]}-{j['date'][4:6]}-{j['date'][6:]}")
+            for t in j.get("tables") or []:
+                fl = [x.strip() for x in t.get("fields") or []]
+                if "證券代號" in fl and "收盤價" in fl and "最後揭示買價" in fl:
+                    i, ic, ib, ia = fl.index("證券代號"), fl.index("收盤價"), fl.index("最後揭示買價"), fl.index("最後揭示賣價")
+                    rows = [r for r in t.get("data") or [] if r and len(r) > ia]
+                    parts.append(pd.DataFrame({"stock_id": [_code(r[i]) for r in rows], "close_off": [_num(r[ic]) for r in rows],
+                                               "bid": [_num(r[ib]) for r in rows], "ask": [_num(r[ia]) for r in rows], "date": d}))
+    df = pd.concat(parts, ignore_index=True)
+    return df[df["stock_id"].str.match(r"^\d{4}[A-Z]?$|^00")].reset_index(drop=True)
+
+
 def segments(cal_days, log: dict) -> pd.DataFrame:
     """官方逐日市場別壓成區段：同股同市場、市場交易日連續者合併。回傳 (stock_id, market, start, end, days, src)。"""
     idx = {str(pd.Timestamp(d).date()): i for i, d in enumerate(sorted(cal_days))}

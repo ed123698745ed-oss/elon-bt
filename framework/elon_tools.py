@@ -39,28 +39,76 @@ def share_return(entry_date, entry_px, exit_date, exit_px, events):
             shares = pre * (1.0 + ev.get("stock", 0.0)) * ev.get("swap", 1.0)
     return (shares * exit_px + cash) / entry_px - 1
 
-def tick_size(price, kind="stock"):
-    """現行升降單位。kind='stock' 股票，'etf' ETF。更早期間使用前先與官方值比對。"""
+TICK_CHANGE = pd.Timestamp("2005-03-01")  # 證交所 introduce004.pdf「調整股價升降單位－自94年3月1日實施－」
+
+
+def tick_size(price, kind="stock", date=None):
+    """升降單位。kind='stock' 股票，'etf' ETF（受益憑證）。
+    股票：2005-03-01 起現行表（<10 0.01、<50 0.05、<100 0.1、<500 0.5、<1000 1、≥1000 5）；
+    之前為舊表（<5 0.01、<15 0.05、<50 0.1、<150 0.5、<1000 1、≥1000 5），來源同上 PDF 新舊對照表。
+    ETF：<50 0.01、≥50 0.05；0050 自 2004 年起成交價即為此級距（資料實證），故全期適用。
+    退回-69（外部審查）：原本所有日期都套現行表，2005-03-01 前會差一檔。"""
     p = Decimal(str(price))
     if kind == "etf":
         return Decimal("0.01") if p < 50 else Decimal("0.05")
-    for bound, tick in ((10, "0.01"), (50, "0.05"), (100, "0.1"), (500, "0.5"), (1000, "1")):
+    old = date is not None and pd.Timestamp(date) < TICK_CHANGE
+    table = ((5, "0.01"), (15, "0.05"), (50, "0.1"), (150, "0.5"), (1000, "1")) if old else \
+        ((10, "0.01"), (50, "0.05"), (100, "0.1"), (500, "0.5"), (1000, "1"))
+    for bound, tick in table:
         if p < bound:
             return Decimal(tick)
     return Decimal("5")
 
+
+def security_kind(stock_id: str) -> str:
+    """代號以 00 開頭者為 ETF（含槓反、債券 ETF）；其餘視為股票。"""
+    return "etf" if str(stock_id).startswith("00") else "stock"
+
+
+# 跌幅限制縮小為 3.5%（漲幅不變）的官方期間：證交所 60 週年特刊（89 年兩段）、央行國內經濟金融日誌（97 年 10 月）
+DOWN_35 = [(pd.Timestamp("2000-10-20"), pd.Timestamp("2000-11-07")),
+           (pd.Timestamp("2000-11-21"), pd.Timestamp("2000-12-31")),
+           (pd.Timestamp("2008-10-13"), pd.Timestamp("2008-10-24"))]
+
+
+def limit_pcts(date):
+    d = pd.Timestamp(date)
+    up = Decimal("0.07") if d < pd.Timestamp("2015-06-01") else Decimal("0.10")
+    dn = Decimal("0.035") if any(a <= d <= b for a, b in DOWN_35) else up
+    return up, dn
+
+
 def limit_prices(ref, date, kind="stock"):
     """依官方規則推算漲跌停價（只在判斷能否成交時用；事件由漲跌停定義時必須用官方逐日值）。
-    2015-06-01 前漲跌幅 7%，之後 10%。漲停向下取到升降單位，跌停向上取。
+    2015-06-01 前漲跌幅 7%，之後 10%；DOWN_35 期間跌幅 3.5%。漲停向下取到升降單位，跌停向上取；升降單位依日期與證券種類。
     除權息日、減資恢復買賣日請傳入官方參考價；新上市（櫃）前五日無漲跌幅限制，不要呼叫本函式。
     """
-    pct = Decimal("0.07") if pd.Timestamp(date) < pd.Timestamp("2015-06-01") else Decimal("0.10")
+    pu, pdn = limit_pcts(date)
     r = Decimal(str(ref))
-    up_raw, dn_raw = r * (1 + pct), r * (1 - pct)
-    tu, td = tick_size(up_raw, kind), tick_size(dn_raw, kind)
+    up_raw, dn_raw = r * (1 + pu), r * (1 - pdn)
+    tu, td = tick_size(up_raw, kind, date), tick_size(dn_raw, kind, date)
     up = (up_raw / tu).to_integral_value(rounding=ROUND_FLOOR) * tu
     dn = (dn_raw / td).to_integral_value(rounding=ROUND_CEILING) * td
     return float(up), float(dn)
+
+REF_BIDASK_FROM = pd.Timestamp("2011-03-28")  # 證交所 60 週年特刊：開盤競價基準決定原則修正，100-03-28 實施
+
+
+def next_base(base, close, bid, ask, next_date):
+    """次一營業日開盤競價基準（＝漲跌幅計算基準）。
+    有收盤價→收盤價。無收盤價：2011-03-28 起，收盤時最高買進申報價高於當日基準→該買價；最低賣出申報價低於基準→該賣價；
+    否則沿用當日基準。2011-03-28 前沿用當日基準（舊制「連續 2 日漲／跌至限度揭示價得為基準」未納入，見注意事項）。"""
+    if close is not None and close == close and close > 0:
+        return close
+    if base is None or base != base:
+        return None
+    if pd.Timestamp(next_date) >= REF_BIDASK_FROM:
+        if bid is not None and bid == bid and bid > base:
+            return bid
+        if ask is not None and ask == ask and 0 < ask < base:
+            return ask
+    return base
+
 
 def compare_limits(sample):
     """sample 欄位：ref, date, kind, official_up, official_dn。回傳不一致的列；應為空才可用推算值。"""

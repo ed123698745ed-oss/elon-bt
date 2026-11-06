@@ -6,6 +6,8 @@
 """
 from __future__ import annotations
 
+import pandas as pd
+
 from dataclasses import dataclass
 from datetime import date
 
@@ -65,7 +67,10 @@ def judge_fill(bar, direction: str, action: str, session: str, prev_close: float
         return Fill(False, None, f"資料不足：{ls}，無法判斷是否鎖漲跌停", "可成交性未驗證", insufficient=True)
     if bar is None or bar.get("halted"):
         return Fill(False, None, "停牌或無資料")
-    if not bar.get("volume"):
+    vol = bar.get("volume")
+    if vol is None or pd.isna(vol):   # 退回-69：NaN 的布林值為真，原寫法會把成交量缺值當成有成交
+        return Fill(False, None, "資料不足：成交量缺值", "可成交性未驗證", insufficient=True)
+    if vol <= 0:
         return Fill(False, None, "零量")
     buy = (direction == "long") == (action == "entry")
     px = bar["open"] if session == "open" else bar["close"]
@@ -77,7 +82,7 @@ def judge_fill(bar, direction: str, action: str, session: str, prev_close: float
         return Fill(False, None, "一價鎖跌停，賣不到")
     warn = []
     if ls.startswith("無漲跌幅"):
-        warn.append("無漲跌幅日（初次掛牌前五日），不判鎖定")
+        warn.append(f"{ls}，不判鎖定")
     if buy and up is not None and px == up:
         warn.append("價位在漲停，排隊未驗證")
     if not buy and dn is not None and px == dn:
