@@ -48,4 +48,8 @@ jobs:
           json.dump(m,open('out/manifest.json','w'),ensure_ascii=False,indent=1)
           P
           mv raw-all.tar.gz out/raw.tar.gz
+          OLD=$(grep -o 'supersedes=[A-Za-z0-9._-]*' jobs/build.txt | tail -1 | cut -d= -f2)
+          if [ -n "$OLD" ] && gh release view "$OLD" >/dev/null 2>&1; then
+            gh release edit "$OLD" --notes "⚠ 本版不完整，已由 $TAG 取代，請改用 $TAG。原因見 $TAG 說明。（原說明：清冊 manifest.json；建置日誌 build_log.json；原始資料 raw.tar.gz）"
+          fi
           gh release create "$TAG" --title "$TAG 第一期資料層" --notes "清冊 manifest.json；建置日誌 build_log.json；測試輸出 test_output.txt（結束碼見 manifest.tests_exit_code）；原始資料 raw.tar.gz；程式版本見 manifest.code_commit" out/*
