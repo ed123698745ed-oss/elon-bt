@@ -106,3 +106,10 @@ def test_tpex_official_limit_used_example():
     d = _k(["3147"])
     r = d.set_index("date").loc["2018-11-21"]
     assert (r["limit_up"], r["limit_down"]) == (21.0, 17.2)
+
+
+@need_out
+def test_daily_k_no_duplicate_keys():
+    """外部審查「日K列數差 1」：舊標籤 data-20261105 有 1 列重複（3454 2011-07-27），r67 起已無；此後每版都要檢查。"""
+    d = pd.read_parquet(os.path.join(OUT, "daily_k.parquet"), columns=["date", "stock_id"])
+    assert not d.duplicated().any()
