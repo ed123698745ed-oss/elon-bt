@@ -14,20 +14,23 @@ from framework.core import _d, norm_id
 TRADABLE = ("上市", "上櫃")
 
 
-def universe_on(status_rows, d, include_unverified=False) -> list[str]:
-    """訊號日 d 當時合格（上市或上櫃）的代號，含之後才下市者；不用現行清單回填。
+def universe_on(periods, d, include_unverified=False) -> list[str]:
+    """訊號日 d 當時在官方上市或上櫃的代號（含之後才下市者）；不用現行清單回填。
 
-    身分未驗證（verified=False）預設排除，報告須另做放回敏感度（A9）。
+    退回-68（Eve R02）：唯一入口，只接受資料層 listing_periods.parquet 的列
+    （欄位 stock_id、market、start、end、basis），與主日K用同一份歷史市場區段；
+    轉板前的合法上櫃期間、已下市者都在內，興櫃與官方查無期間不在內。
+    傳入 status.parquet（現行掛牌日，只有一段）會直接報錯，避免漏掉歷史段。
+    include_unverified 參數保留相容，listing_periods 只含官方證實期間，故無作用。
     """
     d = _d(d)
     out = set()
-    for r in status_rows:
-        if r["status"] not in TRADABLE:
+    for r in periods:
+        if "basis" not in r or "status" in r:
+            raise ValueError("universe_on 只接受 listing_periods.parquet 的列（status.parquet 只有現行掛牌日，會漏歷史段）")
+        if r["market"] not in TRADABLE:
             continue
-        if not include_unverified and not r.get("verified", False):
-            continue
-        s, e = _d(r["start_date"]), (_d(r["end_date"]) if r.get("end_date") else date.max)
-        if s <= d <= e:
+        if _d(r["start"]) <= d <= _d(r["end"]):
             out.add(norm_id(r["stock_id"]))
     return sorted(out)
 
@@ -38,6 +41,7 @@ class Fill:
     price: float | None
     reason: str = ""
     warn: str = ""
+    insufficient: bool = False   # True＝資料不足（不是不能成交），交易須排除、批次列未完成
 
 
 def judge_fill(bar, direction: str, action: str, session: str, prev_close: float | None = None,
@@ -54,6 +58,11 @@ def judge_fill(bar, direction: str, action: str, session: str, prev_close: float
     """
     if direction not in ("long", "short") or action not in ("entry", "exit") or session not in ("open", "close"):
         raise ValueError("參數錯誤")
+    # 退回-68（Eve R03）：限幅狀態必須傳到成交結果。待查與缺參考價時無法判斷是否鎖漲跌停 → 資料不足（不得當可成交）；
+    # 已證實無漲跌幅（初次掛牌前五日）正常放行並註記。
+    ls = str(bar.get("limit_src") or "") if bar is not None else ""
+    if ls.startswith("待查") or ls == "缺參考價":
+        return Fill(False, None, f"資料不足：{ls}，無法判斷是否鎖漲跌停", "可成交性未驗證", insufficient=True)
     if bar is None or bar.get("halted"):
         return Fill(False, None, "停牌或無資料")
     if not bar.get("volume"):
@@ -67,6 +76,8 @@ def judge_fill(bar, direction: str, action: str, session: str, prev_close: float
     if not buy and dn is not None and one and px == dn:
         return Fill(False, None, "一價鎖跌停，賣不到")
     warn = []
+    if ls.startswith("無漲跌幅"):
+        warn.append("無漲跌幅日（初次掛牌前五日），不判鎖定")
     if buy and up is not None and px == up:
         warn.append("價位在漲停，排隊未驗證")
     if not buy and dn is not None and px == dn:

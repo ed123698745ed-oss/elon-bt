@@ -169,3 +169,26 @@ def quarantine_reason(sid: str, d: pd.Timestamp, cov: dict) -> str:
     if tp and tw:
         return "官方查無（興櫃、未掛牌或已下市）"
     return "官方檔缺漏（未取得，不判定）"
+
+
+def listing_periods(seg: pd.DataFrame, st: pd.DataFrame) -> pd.DataFrame:
+    """退回-68（Eve R02）：唯一的歷史母體表＝現行官方掛牌期間 ∪ 官方逐日市場別區段，同股同市場重疊或相鄰者合併。
+    主日K的保留與 framework.market.universe_on 都以這張表為準（同一份資料）。"""
+    cur = st[st["verified"]][["stock_id", "status", "start_date", "end_date"]].rename(
+        columns={"status": "market", "start_date": "start", "end_date": "end"})
+    cur["end"] = pd.to_datetime(cur["end"]).fillna(pd.Timestamp("2099-12-31"))
+    cur["basis"] = "現行官方掛牌期間"
+    sg = seg[["stock_id", "market", "start", "end"]].assign(basis="官方逐日市場別")
+    allp = pd.concat([cur, sg], ignore_index=True).sort_values(["stock_id", "market", "start"])
+    out = []
+    for (sid, mkt), g in allp.groupby(["stock_id", "market"]):
+        cs = ce = None; bs = set()
+        for r in g.itertuples():
+            if cs is None:
+                cs, ce, bs = r.start, r.end, {r.basis}
+            elif r.start <= ce + pd.Timedelta(days=1):
+                ce = max(ce, r.end); bs.add(r.basis)
+            else:
+                out.append((sid, mkt, cs, ce, "、".join(sorted(bs)))); cs, ce, bs = r.start, r.end, {r.basis}
+        out.append((sid, mkt, cs, ce, "、".join(sorted(bs))))
+    return pd.DataFrame(out, columns=["stock_id", "market", "start", "end", "basis"])

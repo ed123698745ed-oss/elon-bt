@@ -221,6 +221,9 @@ def split_by_market(px: pd.DataFrame, st: pd.DataFrame, cal: pd.DataFrame):
                            "transfers": int((~ev["initial"]).sum()) if len(ev) else 0,
                            "first5_rows_by_status": nl["no_limit_status"].value_counts().to_dict() if len(nl) else {}}
     LOG["market_split"]["segments_file"] = "market_segments.parquet（官方逐日區段）"
+    lp = mh.listing_periods(seg, st)
+    LOG["market_split"]["listing_periods"] = len(lp)
+    LOG["_listing_periods"] = lp
     return main, qx.drop(columns=["mkt_off"]), seg.merge(ev[["stock_id", "start", "initial"]], on=["stock_id", "start"], how="left"), nl
 
 
@@ -310,7 +313,8 @@ def main():
     dk["stock_id"] = dk["stock_id"].astype(str)
     files = {"calendar.parquet": cal, "status.parquet": st, "daily_k.parquet": dk, "official_exright.parquet": ex,
              "corp_actions.parquet": ca, "daily_k_quarantine.parquet": qx, "market_segments.parquet": ev,
-             "calendar_check.parquet": calendar_check.check(cal, LOG)}
+             "calendar_check.parquet": calendar_check.check(cal, LOG),
+             "listing_periods.parquet": LOG.pop("_listing_periods")}
     man = {"built_at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "raw_dir": RAW, "files": {}}
     for name, df in files.items():
         p = os.path.join(OUT, name)

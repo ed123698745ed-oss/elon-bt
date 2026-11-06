@@ -10,6 +10,7 @@
   出場日收盤做多碰跌停、放空碰漲停即順延到下一個不觸限且有成交的交易日。卡片規則比通用判定嚴格：
   通用 judge_fill 對「收在限價」放行並標「排隊未驗證」，044 卡片則直接取消／順延。無漲跌幅日限價為空，不會觸限。
 - 訊號窗或持有期間碰到跳動、資料不足的公司行動 → 該部位未完成，所屬批次不列主統計（與原快篩相同處理）。
+- 進場日或出場判定日為限幅待查／缺參考價 → 該部位「未完成：限幅待查資料不足」（退回-68，Eve R03）。
 """
 from __future__ import annotations
 
@@ -36,7 +37,7 @@ def main():
     stats.load(BT)
     cal = Calendar(pd.read_parquet(f"{OUT}/calendar.parquet")["date"].dt.date)
     st = pd.read_parquet(f"{OUT}/status.parquet")
-    cols = ["date", "stock_id", "open", "close", "amount", "limit_up", "limit_down", "no_trade", "jump_flag"]
+    cols = ["date", "stock_id", "open", "close", "amount", "limit_up", "limit_down", "no_trade", "jump_flag", "limit_src"]
     dk = pd.read_parquet(f"{OUT}/daily_k.parquet", columns=cols)
     dk = dk[~dk["stock_id"].str[:2].isin(["00", "91"])]
     dk["date"] = dk["date"].dt.date
@@ -54,6 +55,9 @@ def main():
     O, C, AMT, UP, DN = wide("open"), wide("close"), wide("amount", 0.0), wide("limit_up"), wide("limit_down")
     NT = wide("no_trade", 1.0) > 0           # 無資料或無成交＝不可成交
     JP = wide("jump_flag", 0.0) > 0
+    # 退回-68（Eve R03）：限幅待查／缺參考價的日子無法判斷是否觸限 → 進出場碰到即列資料不足（不當可成交、也不當取消）
+    dk["pending_limit"] = dk["limit_src"].astype(str).str.startswith("待查") | (dk["limit_src"] == "缺參考價")
+    PD = wide("pending_limit", 0.0) > 0
     AMT[NT] = 0.0
     ca = pd.read_parquet(f"{OUT}/corp_actions.parquet")
     ca = ca[ca["stock_id"].isin(col)]
@@ -94,6 +98,11 @@ def main():
         for side, sel in legs.items():
             for tr, s, jj in sel:
                 o = O[E, jj]
+                if PD[E, jj] and not NT[E, jj]:
+                    res[side].append(None)
+                    incomplete = True
+                    pos_rows.append(dict(S=S, side=side, stock_id=s, status="未完成：限幅待查資料不足", ret=None))
+                    continue
                 if NT[E, jj] or np.isnan(o) or o == UP[E, jj] or o == DN[E, jj]:
                     res[side].append(None)
                     pos_rows.append(dict(S=S, side=side, stock_id=s, status="取消", ret=None))
@@ -107,6 +116,8 @@ def main():
                     stt = "未完成：查無出場"
                 elif JP[E + 1:x + 1, jj].any() or any(days[E] < y <= days[x] for y in bad_act.get(s, [])):
                     stt = "未完成：跳動或公司行動資料不足"
+                elif PD[E + 4:x + 1, jj].any():
+                    stt = "未完成：限幅待查資料不足"
                 else:
                     r = trade_return(side, o, C[x, jj], days[E], days[x], acts.get(s, [])).ret
                     last_exit = max(last_exit, x)

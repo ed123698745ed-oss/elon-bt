@@ -28,8 +28,9 @@ def test_zero_price_rows_are_no_trade():
     assert not ((d["close"] == 0) & ~d["no_trade"]).any()
 
 
-def ca_rows():
-    return pd.read_parquet(os.path.join(OUT, "corp_actions.parquet"))
+def ca_rows(ids=None):
+    c = pd.read_parquet(os.path.join(OUT, "corp_actions.parquet"))
+    return c if ids is None else c[c["stock_id"].isin(ids)]
 
 
 def test_r13_1512_real_capital_reduction():
@@ -136,3 +137,54 @@ def test_r67_inferred_ratios_not_in_share_ratio():
     c = ca_rows()
     red = c[c["kind"].isin(["減資", "面額變更"])]
     assert red.loc[red["ratio_basis"] != "官方公告值", "share_ratio"].isna().all()
+
+
+# ---------------------------------------------------------------- 退回-68（Eve 複審）
+def test_r68_official_events_all_in_corp_actions():
+    """R01：每筆官方除權息事件都在公司行動表（FinMind 或官方補列；無分項者為資料不足事件）。"""
+    ex = pd.read_parquet(os.path.join(OUT, "official_exright.parquet"))
+    c = ca_rows()
+    keys = set(zip(c["stock_id"], pd.to_datetime(c["ex_date"])))
+    miss = [(s, d) for s, d in zip(ex["stock_id"], pd.to_datetime(ex["date"])) if (s, d) not in keys]
+    assert miss == []
+
+
+@pytest.mark.parametrize("sid,day", [("8938", "2003-07-31"), ("4126", "2004-09-02")])
+def test_r68_early_tpex_exright_excludes_trade(sid, day):
+    """R01 端到端：明安、太醫早期除權息無分項 → 資料不足事件；持有期跨過的交易由 trade_row 排除，不用價格相除。"""
+    from framework.core import Calendar, Split, actions_from_table
+    from framework.ledger import trade_row
+    c = ca_rows([sid])
+    ev = c[pd.to_datetime(c["ex_date"]) == pd.Timestamp(day)]
+    assert len(ev) >= 1 and ev["share_ratio"].isna().all() and ev["flag"].str.startswith("資料不足").all()
+    cal = Calendar(pd.read_parquet(os.path.join(OUT, "calendar.parquet"))["date"].dt.date)
+    acts = actions_from_table(c.to_dict("records"), sid)
+    d0 = cal.shift(day, -2); d1 = cal.shift(day, 2)
+    sp = Split(cal.days[-300], cal.days[-200])
+    row = trade_row(cal, sp, trade_id=1, combo="t", is_etest=False, symbol=sid, direction="long",
+                    info_time=f"{cal.shift(d0, -1)} 14:30", entry_time=f"{d0} 09:00", entry_date=d0, entry_session="open",
+                    entry_px=100.0, exit_date=d1, exit_session="close", exit_px=100.0, actions=acts, cluster=str(d0))
+    assert row["ret"] is None and "資料不足" in str(row["excluded_reason"])
+
+
+def test_r68_universe_from_listing_periods():
+    """R02 端到端：工信 2010-01-04 在母體（上櫃）；王道銀 2016 不在、2018 在；已下市股在其上市期間內。"""
+    from framework.market import universe_on
+    lp = pd.read_parquet(os.path.join(OUT, "listing_periods.parquet"))
+    rows = lp.to_dict("records")
+    assert "5521" in universe_on(rows, "2010-01-04")
+    assert "2897" not in universe_on(rows, "2016-06-01") and "2897" in universe_on(rows, "2018-01-02")
+    d = k(["5521"])
+    assert set(d.loc[d["date"] == "2010-01-04", "market"]) == {"上櫃"}
+    gone = lp[(lp["end"] < "2020-01-01")].iloc[0]
+    mid = (pd.Timestamp(gone["start"]) + (pd.Timestamp(gone["end"]) - pd.Timestamp(gone["start"])) / 2)
+    assert gone["stock_id"] in universe_on(rows, mid.strftime("%Y-%m-%d"))
+
+
+def test_r68_pending_limit_rows_flagged_insufficient():
+    """R03 端到端：主日K 的待查限幅列傳入 judge_fill 一律回傳資料不足。"""
+    from framework.market import judge_fill
+    d = pd.read_parquet(os.path.join(OUT, "daily_k.parquet"), filters=[("limit_src", "==", "待查（過渡期初次掛牌前五日）")])
+    assert len(d) > 0
+    res = [judge_fill(r, "long", "entry", "open") for r in d.head(200).to_dict("records") if r["volume"]]
+    assert res and all((not f.ok) and f.insufficient for f in res)

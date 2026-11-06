@@ -12,10 +12,10 @@ import sys
 import pandas as pd
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-OLD = os.path.join(ROOT, "experiments", "out_044")
+OLD = os.environ.get("OLD_RES", os.path.join(ROOT, "experiments", "out_044"))
 NEW = os.environ.get("RES_DIR", "/home/claude/rerun044_new")
 OUT_DATA = os.environ.get("ELON_OUT", "/home/claude/raw_dl/out_new")
-DST = os.path.join(ROOT, "experiments", "out_044_bridge")
+DST = os.environ.get("BRIDGE_DST", os.path.join(ROOT, "experiments", "out_044_bridge"))
 
 
 def main():
@@ -34,7 +34,7 @@ def main():
     ca = pd.read_parquet(f"{OUT_DATA}/corp_actions.parquet") if os.path.exists(f"{OUT_DATA}/corp_actions.parquet") else None
     inferred = {}
     if ca is not None and "ratio_basis" in ca:
-        x = ca[ca["ratio_basis"].isin(["僅有反推值", "取不到"])]
+        x = ca[ca["ratio_basis"].isin(["僅有反推值", "取不到"]) | ca["source"].astype(str).str.contains("除權除息歷史表")]
         for s, g in x.groupby("stock_id"):
             inferred[s] = list(pd.to_datetime(g["ex_date"]).dt.date)
     reason = []
@@ -46,7 +46,12 @@ def main():
         else:
             s0 = pd.Timestamp(r.S).date()
             hit = any(s0 <= d <= (pd.Timestamp(r.S) + pd.Timedelta(days=60)).date() for d in inferred.get(r.stock_id, []))
-            reason.append("推算換股比改列資料不足" if hit and "資料不足" in str(r.status_new) else "跳動／漲跌幅判定修正")
+            if "限幅待查" in str(r.status_new):
+                reason.append("限幅待查改列資料不足")
+            elif hit and "資料不足" in str(r.status_new):
+                reason.append("公司行動資料不足（推算比率或早期櫃買除權息無分項）")
+            else:
+                reason.append("跳動／漲跌幅判定修正")
     p["reason"] = reason
     p.drop(columns=["_merge"]).to_csv(f"{DST}/position_bridge.csv", index=False, encoding="utf-8-sig")
 
@@ -61,7 +66,8 @@ def main():
         "batch_changes": b["change"].value_counts().to_dict(),
         "positions_kind": p["kind"].value_counts().to_dict(),
         "position_reason": p["reason"].value_counts().to_dict(),
-        "batches_touching_inferred_ratio": int(p.loc[p["reason"] == "推算換股比改列資料不足", "S"].nunique()),
+        "batches_touching_insufficient_actions": int(p.loc[p["reason"].str.startswith("公司行動資料不足"), "S"].nunique()),
+        "batches_touching_pending_limit": int(p.loc[p["reason"] == "限幅待查改列資料不足", "S"].nunique()),
         "period_judgement_changed": t.loc[t["顯著判斷改變（p<0.05）"] | t["平均報酬正負改變"], "組"].tolist(),
     }
     json.dump(summ, open(f"{DST}/summary.json", "w"), ensure_ascii=False, indent=1, default=str)

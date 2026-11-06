@@ -214,7 +214,15 @@ def build(official_ex: pd.DataFrame, log: dict) -> pd.DataFrame:
         base = dict(stock_id=r.stock_id, ex_date=r.date, cash_date=None, announced=None)
         o = official_ex[(official_ex["stock_id"] == r.stock_id) & (official_ex["date"] == r.date)].iloc[0]
         if o["src"].startswith("TPEx"):
-            c, k, rs = (o.get("cash") or 0.0), (o.get("stock_per_k") or 0.0), (o.get("rights_sh") or 0.0)
+            # 退回-68（Eve R01）：NaN 不得被「or 0.0」吃掉。2000-09～2007-12 櫃買歷史表沒有現金／配股／現增欄，
+            # 三欄全缺時不是「0」而是「不知道」→ 列資料不足事件，訊號與持有窗須接住；不用參考價反推。
+            raw3 = [o.get("cash"), o.get("stock_per_k"), o.get("rights_sh")]
+            known = [x for x in raw3 if x is not None and pd.notna(x)]
+            if not known:
+                fill.append(dict(base, kind="除權息未分類", cash=None, share_ratio=None, source="TPEx 除權除息歷史表（無分項欄位）",
+                                 flag="資料不足：官方歷史表只有參考價與漲跌停，無現金／配股／現增分項"))
+                continue
+            c, k, rs = [float(x) if (x is not None and pd.notna(x)) else 0.0 for x in raw3]
             if c > 0:
                 fill.append(dict(base, kind="現金股利", cash=c, share_ratio=1.0, source="TPEx 除權除息計算結果", flag=None))
             if k > 0:
@@ -226,7 +234,7 @@ def build(official_ex: pd.DataFrame, log: dict) -> pd.DataFrame:
             if c <= 0 and k <= 0 and rs <= 0:
                 fill.append(dict(base, kind="除權息未分類", cash=None, share_ratio=None, source="TPEx 除權除息計算結果",
                                  flag="資料不足：官方表無法拆分"))
-        elif o["kind"] == "息" and (o.get("wv") or 0) > 0:
+        elif o["kind"] == "息" and pd.notna(o.get("wv")) and float(o.get("wv") or 0) > 0:
             fill.append(dict(base, kind="現金股利", cash=o["wv"], share_ratio=1.0, source="TWSE TWT49U（權值+息值，純息）", flag=None))
         else:
             fill.append(dict(base, kind="除權息未分類", cash=None, share_ratio=None, source="TWSE TWT49U",
@@ -234,6 +242,12 @@ def build(official_ex: pd.DataFrame, log: dict) -> pd.DataFrame:
     if fill:
         ca = pd.concat([ca, pd.DataFrame(fill)], ignore_index=True)
     log["corp_actions"]["filled_from_official"] = pd.DataFrame(fill)["kind"].value_counts().to_dict() if fill else {}
+    # 對帳：每筆官方除權息事件都必須在公司行動表有對應（FinMind 或官方補列），否則建置失敗
+    keys = set(zip(ca["stock_id"].astype(str), pd.to_datetime(ca["ex_date"])))
+    unmatched = [(s, d) for s, d in zip(official_ex["stock_id"].astype(str), pd.to_datetime(official_ex["date"])) if (s, d) not in keys]
+    log["corp_actions"]["official_events_unmatched"] = len(unmatched)
+    if unmatched:
+        raise RuntimeError(f"官方除權息事件未進公司行動表 {len(unmatched)} 筆，例 {unmatched[:5]}")
     log["corp_actions"]["rows_after_fill"] = len(ca)
     log["corp_actions"]["mismatch_by_year"] = bad.groupby(bad["date"].dt.year).size().to_dict()
     mm = set(zip(bad["stock_id"], bad["date"]))

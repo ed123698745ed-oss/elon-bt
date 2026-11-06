@@ -152,18 +152,33 @@ def test_r04_one_price_limit_up_not_filled():
 
 
 def test_r57_universe_uses_status_on_date():
-    """退回-57（合成資料）：興櫃段不得進母體；下市前仍在母體。"""
+    """退回-57／68（合成資料）：母體只吃 listing_periods；興櫃段不在表內；轉板前上櫃段與已下市者在表內；
+    傳 status.parquet 列直接報錯（Eve R02）。"""
     from framework.market import universe_on
-    rows = [dict(stock_id="2897", status="興櫃", start_date="2008-12-01", end_date="2017-05-08", verified=True),
-            dict(stock_id="2897", status="上市", start_date="2017-05-09", end_date=None, verified=True),
-            dict(stock_id=1234, status="上櫃", start_date="2005-01-03", end_date="2012-06-30", verified=True),
-            dict(stock_id="9999", status="上市", start_date="2000-01-01", end_date=None, verified=False)]
-    assert universe_on(rows, "2010-01-04") == ["1234"]
-    assert universe_on(rows, "2018-01-02") == ["2897"]
-    assert "9999" in universe_on(rows, "2018-01-02", include_unverified=True)
+    periods = [dict(stock_id="2897", market="上市", start="2017-05-05", end="2099-12-31", basis="現行官方掛牌期間"),
+               dict(stock_id="5521", market="上櫃", start="2003-08-01", end="2012-12-17", basis="官方逐日市場別"),
+               dict(stock_id="5521", market="上市", start="2012-12-18", end="2099-12-31", basis="現行官方掛牌期間"),
+               dict(stock_id=1234, market="上櫃", start="2005-01-03", end="2012-06-30", basis="官方逐日市場別")]
+    assert universe_on(periods, "2010-01-04") == ["1234", "5521"]
+    assert universe_on(periods, "2016-01-04") == ["5521"]
+    assert universe_on(periods, "2018-01-02") == ["2897", "5521"]
+    with pytest.raises(ValueError):
+        universe_on([dict(stock_id="5521", status="上市", start_date="2012-12-18", end_date=None, verified=True)], "2010-01-04")
 
 
-@need_bt
+def test_r68_pending_limit_not_silently_filled():
+    """退回-68（Eve R03）：待查限幅／缺參考價 → 資料不足、不得無警告放行；已證實無漲跌幅 → 正常放行並註記。"""
+    from framework.market import judge_fill
+    bar = dict(open=10, high=11, low=9.5, close=10.5, volume=1000, limit_up=None, limit_down=None)
+    for ls in ("待查（過渡期初次掛牌前五日）", "缺參考價"):
+        f = judge_fill(dict(bar, limit_src=ls), "long", "entry", "open")
+        assert not f.ok and f.insufficient and f.reason.startswith("資料不足") and f.warn
+    f = judge_fill(dict(bar, limit_src="無漲跌幅（初次掛牌前五日）"), "long", "entry", "open")
+    assert f.ok and not f.insufficient and "無漲跌幅" in f.warn
+    f = judge_fill(dict(bar, limit_src="規則", limit_up=11.0, limit_down=9.0), "short", "entry", "open")
+    assert f.ok and not f.insufficient
+
+
 def test_precheck_end_to_end():
     """退回-55／11／58 與框架章：交件前檢查要擋下。"""
     import pandas as pd
