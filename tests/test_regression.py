@@ -179,6 +179,7 @@ def test_r68_pending_limit_not_silently_filled():
     assert f.ok and not f.insufficient
 
 
+@need_bt
 def test_precheck_end_to_end():
     """退回-55／11／58 與框架章：交件前檢查要擋下。"""
     import pandas as pd

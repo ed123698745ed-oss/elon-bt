@@ -1,0 +1,25 @@
+name: retest
+# 對既有資料標籤重跑測試（不重建資料），把輸出另存為該 Release 的 test_output_retest.txt
+on:
+  push:
+    paths: ["jobs/retest.txt"]
+permissions: { contents: write }
+jobs:
+  retest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -q pandas pyarrow pytest numpy
+      - name: test against release
+        run: |
+          TAG=$(grep -o 'tag=[A-Za-z0-9._-]*' jobs/retest.txt | tail -1 | cut -d= -f2)
+          mkdir -p out && cd out && gh release download "$TAG" -p '*.parquet' && cd ..
+          set +e
+          { echo "retest of $TAG at commit $GITHUB_SHA"; ELON_OUT=out BT_STATS_PATH=none python -m pytest -q -rA tests/; } > test_output_retest.txt 2>&1
+          tail -5 test_output_retest.txt
+          gh release upload "$TAG" test_output_retest.txt --clobber
