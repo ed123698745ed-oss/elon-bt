@@ -143,6 +143,10 @@ def surveillance():
                 n.append("公告內容為取消措施，起迄與措施需人工核對")
             if pd.isna(r["match_min"]) and "撮合" in r["detail"] and "分盤" not in r["detail"]:
                 n.append("撮合間隔未解析")
+            if CAL and pd.notna(r["start"]) and pd.notna(r["announce"]) and r["start"] <= CAL_MAX:
+                gap = CAL_IDX.get(r["start"], -99) - CAL_IDX.get(r["announce"], -999) if r["announce"] in CAL_IDX else None
+                if gap is not None and not (0 <= gap <= 3):
+                    n.append("處置起日距公告逾 3 個交易日（原公告待核）")
             for c, lab in (("start", "起日"), ("end", "迄日")):
                 if CAL and pd.notna(r[c]) and r[c] <= CAL_MAX and r[c] not in CAL:
                     n.append(f"處置{lab}非交易日（官方規定遇休市順延，實際日期未核）")
@@ -202,6 +206,18 @@ def downtick_list():
     return pd.DataFrame(out, columns=["date", "market", "code", "short_susp", "sbl_susp", "downtick_ban_prev_limit"])
 
 
+def fulldelivery():
+    """證交所變更交易（全額交割）每日名單：名單內＝當日須預收款券；period_auction＝分盤集合競價（官方以 ** 表示）。"""
+    out = []
+    for key, j in _load("twse_fulldelivery"):
+        d = pd.Timestamp(key)
+        for r in j.get("data") or []:
+            if len(r) < 2:
+                continue
+            out.append((d, "上市", str(r[0]).strip(), clean_name(r[1]), len(r) > 2 and str(r[2]).strip() == "**"))
+    return pd.DataFrame(out, columns=["date", "market", "code", "name", "period_auction"])
+
+
 def _cal():
     p = os.environ.get("CAL", "jobs/trading_days.txt")
     if not os.path.exists(p):
@@ -211,6 +227,7 @@ def _cal():
 
 
 CAL, CAL_MAX = _cal()
+CAL_IDX = {d: i for i, d in enumerate(sorted(CAL))}
 
 
 def main():
@@ -220,6 +237,10 @@ def main():
     ix.to_parquet(os.path.join(OUT, "index_daily.parquet"), index=False)
     mf = margin_flags()
     mf.to_parquet(os.path.join(OUT, "margin_flags.parquet"), index=False)
+    fd = fulldelivery()
+    fd.to_parquet(os.path.join(OUT, "fulldelivery.parquet"), index=False)
+    if len(fd):
+        print("fulldelivery", len(fd), fd["date"].min().date(), fd["date"].max().date(), fd["date"].nunique(), "分盤", int(fd["period_auction"].sum()))
     dl = downtick_list()
     dl.to_parquet(os.path.join(OUT, "downtick_list.parquet"), index=False)
     print("margin_flags", len(mf), mf.groupby("market").data_date.agg(["min", "max", "nunique"]).to_string())
