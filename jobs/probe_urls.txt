@@ -1,5 +1,6 @@
-https://www.twse.com.tw/rwd/zh/trading/BFIHBU?startDate=20100101&endDate=20101231&response=json
-https://www.twse.com.tw/rwd/zh/exchangeReport/BFIHBU?startDate=20100101&endDate=20101231&response=json
-https://www.twse.com.tw/rwd/zh/announcement/BFIHBU?startDate=20100101&endDate=20101231&response=json
-https://www.twse.com.tw/rwd/zh/trading/BFIHBU?date=20100104&response=json
-https://www.twse.com.tw/rwd/zh/exchangeReport/BFIHBU?date=20100104&response=json
+https://www.twse.com.tw/rwd/zh/variation/BFIHBU?startDate=20100101&endDate=20101231&response=json
+https://www.twse.com.tw/rwd/zh/variation/TWT85U?date=20100104&response=json
+https://www.twse.com.tw/rwd/zh/change/BFIHBU?startDate=20100101&endDate=20101231&response=json
+https://www.twse.com.tw/rwd/zh/variation/TWTAWU?startDate=20100101&endDate=20101231&response=json
+https://www.twse.com.tw/rwd/zh/halt/TWTAWU?startDate=20100101&endDate=20101231&response=json
+https://www.twse.com.tw/rwd/zh/variation/BFIHBU?startDate=20040101&endDate=20041231&response=json
