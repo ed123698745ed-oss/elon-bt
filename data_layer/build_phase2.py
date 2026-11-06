@@ -152,6 +152,56 @@ def surveillance():
     return df
 
 
+# ---------- 放空限制：融資融券註記（適用次一營業日）與平盤下名單 ----------
+TWSE_CODES = set("OX@%!")
+TPEX_CODES = set("OX@%!*ABCD0123456789")
+
+
+def _next_day_map():
+    ds = sorted(CAL)
+    return {a: b for a, b in zip(ds, ds[1:])}
+
+
+def margin_flags():
+    """每列＝某生效日某證券的融資融券狀態。註記在 D 日資料、適用 D+1（官方：備註欄係表明成交日次一營業日狀況）。"""
+    nxt = _next_day_map()
+    out = []
+    for src, market, codes in (("twse_margin", "上市", TWSE_CODES), ("tpex_margin", "上櫃", TPEX_CODES)):
+        for key, j in _load(src):
+            d = pd.Timestamp(key)
+            eff = nxt.get(d)
+            if src == "twse_margin":
+                rows = [r for t in j.get("tables", []) if "融資融券彙總" in (t.get("title") or "") for r in (t.get("data") or [])]
+            else:
+                rows = [r for r in j["tables"][0].get("data") or [] if len(r) > 1]
+            for r in rows:
+                note = str(r[-1])
+                chars = set(note.replace(" ", "").replace(",", ""))
+                out.append((d, eff, market, str(r[0]).strip(), "O" in chars, "X" in chars, "!" in chars,
+                            "%" in chars, "@" in chars, note.strip(), "".join(sorted(chars - codes))))
+    df = pd.DataFrame(out, columns=["data_date", "effective", "market", "code", "stop_fin", "stop_short",
+                                    "stop_trade", "short_alloc", "fin_alloc", "note_raw", "unknown_codes"])
+    df["parse_note"] = ""
+    df.loc[df.effective.isna(), "parse_note"] = "次一營業日超出交易日曆"
+    df.loc[df.unknown_codes != "", "parse_note"] = "註記含官方說明未列符號，資料不足"
+    return df
+
+
+def downtick_list():
+    """平盤下得融（借）券賣出名單：在名單內＝當日可平盤下放空（另看三個 * 欄）。"""
+    out = []
+    for src, market in (("twse_mark", "上市"), ("tpex_mark", "上櫃")):
+        for key, j in _load(src):
+            d = pd.Timestamp(key)
+            rows = j.get("data") if src == "twse_mark" else j["tables"][0].get("data")
+            for r in rows or []:
+                if len(r) < 5:
+                    continue
+                f = [str(x).strip() == "*" for x in r[2:5]]
+                out.append((d, market, str(r[0]).strip(), *f))
+    return pd.DataFrame(out, columns=["date", "market", "code", "short_susp", "sbl_susp", "downtick_ban_prev_limit"])
+
+
 def _cal():
     p = os.environ.get("CAL", "jobs/trading_days.txt")
     if not os.path.exists(p):
@@ -168,6 +218,15 @@ def main():
     ix = index_daily()
     sv = surveillance()
     ix.to_parquet(os.path.join(OUT, "index_daily.parquet"), index=False)
+    mf = margin_flags()
+    mf.to_parquet(os.path.join(OUT, "margin_flags.parquet"), index=False)
+    dl = downtick_list()
+    dl.to_parquet(os.path.join(OUT, "downtick_list.parquet"), index=False)
+    print("margin_flags", len(mf), mf.groupby("market").data_date.agg(["min", "max", "nunique"]).to_string())
+    print(mf[["stop_fin", "stop_short", "stop_trade", "short_alloc"]].sum().to_string())
+    print("margin parse_note", mf.parse_note.value_counts().to_string())
+    print("downtick_list", len(dl), dl.groupby("market").date.agg(["min", "max", "nunique"]).to_string())
+    print(dl[["short_susp", "sbl_susp", "downtick_ban_prev_limit"]].sum().to_string())
     sv.to_parquet(os.path.join(OUT, "surveillance.parquet"), index=False)
     print("index_daily", len(ix), ix["date"].min().date(), ix["date"].max().date())
     print(ix.notna().sum().to_string())
