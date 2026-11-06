@@ -4,3 +4,4 @@ split 2026-11-05T04:20:05Z
 round2 tpex_stock 2026-11-05T10:25:54Z
 fill gaps 2026-11-06T01:33:20Z
 fill tpex gaps 2026-11-06T02:29:45Z
+fill last 2 2026-11-06T02:44:36Z
