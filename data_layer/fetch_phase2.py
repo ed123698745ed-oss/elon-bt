@@ -1,7 +1,7 @@
 """第二期共用資料層：官方原始檔下載（報酬指數、處置／注意、融資融券、平盤下放空名單）。
 
 用法：python data_layer/fetch_phase2.py <src>
-src：twse_tri twse_ix tpex_ix twse_punish twse_notice tpex_disposal tpex_attention
+src：twse_fulldelivery twse_tri twse_ix tpex_ix twse_punish twse_notice tpex_disposal tpex_attention
      twse_margin tpex_margin twse_mark tpex_mark
 原則（防錯清單 A11／退回-60、67）：每筆回應都核對回傳的日期／區間與查詢一致，不符者不存、記入 attempts；
 查無資料（官方明示）存原檔並標 empty，不推估。可續傳：已存在的檔案略過。
@@ -74,6 +74,9 @@ def jobs(src):
     elif src == "tpex_mark":
         for d in trading_days(dt.date(2013, 1, 2)):
             yield d.strftime("%Y%m%d"), f"{TP}/margin/mark?date={d:%Y/%m/%d}&response=json", d
+    elif src == "twse_fulldelivery":   # 變更交易（全額交割）每日名單，官方自 93/12/24 起
+        for d in trading_days(dt.date(2004, 12, 24)):
+            yield d.strftime("%Y%m%d"), f"{TW}/fullDelivery/TWT85U?date={d:%Y%m%d}&response=json", d
     else:
         raise SystemExit(f"unknown src {src}")
 
@@ -118,6 +121,11 @@ def check(src, j, d):
             return "title日期不符"
         rows = [r for t in ts if "融資融券彙總" in (t.get("title") or "") for r in (t.get("data") or [])]
         return "ok" if rows else "empty"
+    if src == "twse_fulldelivery":
+        want = f"{d.year - 1911:03d}年{d.month:02d}月{d.day:02d}日"
+        if not (j.get("title") or "").startswith(want):
+            return f"title不符:{j.get('title')}"
+        return "ok" if j.get("data") else "empty"
     if src == "twse_mark":
         if j.get("date") != d.strftime("%Y%m%d"):
             return f"date不符:{j.get('date')}"
