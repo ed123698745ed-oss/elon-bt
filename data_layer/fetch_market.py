@@ -193,6 +193,10 @@ def main(src):
     print(f"all jobs finished; done={done} skipped={skipped}")
     if os.environ.get("SHARD_N"):
         return
+    missing = [n for n, _, _, _ in jobs() if not os.path.exists(os.path.join(OUT, n))]
+    if missing:  # 有缺檔（連線錯誤未存）就不標完成，下一輪續抓
+        print(f"missing {len(missing)} files, e.g. {missing[:5]}")
+        return
     open(os.path.join(RAW, f"_market_{src}_complete"), "w").write(datetime.now(timezone.utc).isoformat())
 
 

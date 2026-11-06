@@ -27,7 +27,8 @@ jobs:
           gh release view raw-market >/dev/null 2>&1 || gh release create raw-market --title raw-market --notes "逐日市場別與櫃買歷史除權息原始檔（自動更新）" --prerelease || true
           gh release download raw-market -p market-${{ matrix.src }}.tar.gz || true
           [ -f market-${{ matrix.src }}.tar.gz ] && tar xzf market-${{ matrix.src }}.tar.gz || mkdir -p raw
-          if [ -f raw/_market_${{ matrix.src }}_complete ]; then echo "COMPLETE=1" >> $GITHUB_ENV; fi
+          if [ -f raw/_market_${{ matrix.src }}_complete ] && [ "${{ github.event_name }}" != "push" ]; then echo "COMPLETE=1" >> $GITHUB_ENV; fi
+          rm -f raw/_market_${{ matrix.src }}_complete
       - name: fetch
         if: env.COMPLETE != '1'
         run: BUDGET_MIN=320 GAP=${{ matrix.src == 'twse' && '3' || '1.5' }} python data_layer/fetch_market.py ${{ matrix.src }}
