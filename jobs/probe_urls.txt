@@ -1,3 +1,2 @@
-https://www.twse.com.tw/rwd/zh/fullDelivery/TWT85U?date=20100104&response=json
-https://www.twse.com.tw/rwd/zh/fullDelivery/TWT85U?date=20040302&response=json
-https://www.twse.com.tw/rwd/zh/fullDelivery/BFIHBU?startDate=20190101&endDate=20191231&response=json
+https://www.tpex.org.tw/www/zh-tw/margin/mark?date=2019/10/02&response=json
+https://www.tpex.org.tw/www/zh-tw/margin/mark?date=2019/10/03&response=json
