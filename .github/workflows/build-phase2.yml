@@ -35,6 +35,9 @@ jobs:
           P2_OUT=out CAL=jobs/trading_days.txt python -m pytest -q -rA tests/test_phase2.py > out/test_output.txt 2>&1
           echo "TEST_RC=$?" >> $GITHUB_ENV
           tail -3 out/test_output.txt
+      - name: tests must pass
+        run: |
+          if [ "$TEST_RC" != "0" ]; then echo "測試未通過（rc=$TEST_RC），不發布候選標籤"; cat out/test_output.txt | tail -40; exit 1; fi
       - name: publish
         run: |
           export TAG=$(grep -o 'tag=[A-Za-z0-9._-]*' jobs/phase2_build.txt | tail -1 | cut -d= -f2)
@@ -49,7 +52,8 @@ jobs:
               files[os.path.basename(f)] = {"rows": len(pd.read_parquet(f)), "sha256": hashlib.sha256(open(f, "rb").read()).hexdigest()}
           m = {"data_tag": os.environ["TAG"], "code_commit": os.environ["GITHUB_SHA"], "files": files,
                "raw_assets_sha256": open("raw_sha256.txt").read().split("\n"), "tests_exit_code": int(os.environ.get("TEST_RC", "-1")),
-               "calendar": "jobs/trading_days.txt", "note": "第二期候選標籤；Eve 驗收前不得供策略正式使用"}
+               "calendar": "jobs/trading_days.txt",
+               "source_asof": {os.path.basename(f)[len("_phase2_"):-len("_complete")]: open(f).read().strip().split("\n") for f in sorted(glob.glob("p2/raw/_phase2_*_complete"))}, "note": "第二期候選標籤；Eve 驗收前不得供策略正式使用"}
           json.dump(m, open("out/manifest.json", "w"), ensure_ascii=False, indent=1)
           P
           cp p2/p2-*.tar.gz out/

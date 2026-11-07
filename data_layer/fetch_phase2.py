@@ -31,6 +31,32 @@ def month_end(d):
     return min(n - dt.timedelta(days=1), TODAY)
 
 
+def period_end(src, d):
+    """該筆資料所涵蓋期間的最後一個日曆日：月檔＝月底、年檔＝12/31、日檔＝當日。"""
+    if src in ("twse_tri", "twse_ix", "tpex_ix", "twse_notice", "tpex_attention"):
+        n = dt.date(d.year + (d.month == 12), d.month % 12 + 1, 1)
+        return n - dt.timedelta(days=1)
+    if src in ("twse_punish", "tpex_disposal"):
+        return dt.date(d.year, 12, 31)
+    return d
+
+
+def last_fetch_dates(logpath):
+    """各 key 最近一次成功（ok／empty）下載的日期，取自 attempts 紀錄。"""
+    out = {}
+    if os.path.exists(logpath):
+        with open(logpath, newline="") as f:
+            for row in csv.DictReader(f):
+                if row["result"] in ("ok", "empty"):
+                    out[row["key"]] = dt.date.fromisoformat(row["ts"][:10])
+    return out
+
+
+def is_final(src, d, fetched):
+    """期間結束『之後』才抓到的檔案才算定稿；期間內（含結束當日）抓的，資料可能不完整，之後要補抓。"""
+    return fetched is not None and fetched > period_end(src, d)
+
+
 def trading_days(start):
     with open("jobs/trading_days.txt") as f:
         ds = [dt.date.fromisoformat(x.strip()) for x in f if x.strip()]
@@ -151,10 +177,14 @@ def main(src):
     gap = float(os.environ.get("GAP", "3"))
     budget = time.time() + 60 * float(os.environ.get("BUDGET_MIN", "320"))
     missing = 0
+    fetched = last_fetch_dates(logp)
+    open_keys = []
     for key, url, d in jobs(src):
         fp = os.path.join(out, f"{key}.json")
         if os.path.exists(fp):
-            continue
+            if is_final(src, d, fetched.get(key)) or period_end(src, d) < TODAY and fetched.get(key) is None:
+                continue
+            open_keys.append(key)          # 期間未結束就抓過：重抓（失敗時保留舊檔）
         if time.time() > budget:
             missing += 1
             continue
@@ -179,8 +209,10 @@ def main(src):
             missing += 1
         time.sleep(gap)
     if missing == 0:
-        open(os.path.join(RAW, f"_phase2_{src}_complete"), "w").write(TODAY.isoformat())
-    print(src, "missing", missing)
+        # 第一行＝本次完整檢查日；open_periods＝期間尚未結束、之後仍會更新的 key（資料只到抓取當日）
+        still = [k for k in open_keys]
+        open(os.path.join(RAW, f"_phase2_{src}_complete"), "w").write(f"{TODAY.isoformat()}\nopen_periods={','.join(still)}\n")
+    print(src, "missing", missing, "open", open_keys)
 
 
 if __name__ == "__main__":

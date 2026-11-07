@@ -7,6 +7,11 @@
 import glob, json, os, re
 import pandas as pd
 
+try:
+    from data_layer.phase2_tools import ban_rule, sec_kind, sec_kind_series, RULE_DROP35
+except ImportError:      # 直接以 python data_layer/build_phase2.py 執行
+    from phase2_tools import ban_rule, sec_kind, sec_kind_series, RULE_DROP35
+
 RAW = os.environ.get("RAW", "raw")
 OUT = os.environ.get("OUT", "out")
 P2 = os.path.join(RAW, "phase2")
@@ -153,6 +158,26 @@ def surveillance():
         notes.append("；".join(n))
     df["parse_note"] = notes
     df["count"] = pd.to_numeric(df["count"], errors="coerce")
+    df["sec_kind"] = sec_kind_series(df["code"])
+    # 處置期間可靠性：只標記、不改值、不推估
+    df["period_days"] = (df["end"] - df["start"]).dt.days + 1
+    cancel = df["detail"].str.contains("取消|恢復", regex=True) & (df["kind"] == "處置")
+    flags = []
+    for c, same, long_, in zip(cancel, df["end"] == df["start"], df["period_days"] > 60):
+        f = []
+        if c:
+            f.append("取消／恢復公告")
+        if same:
+            f.append("起訖同日")
+        if long_:
+            f.append("期間逾60日")
+        flags.append("；".join(f))
+    df["period_flag"] = flags
+    df.loc[df["kind"] != "處置", "period_flag"] = ""
+    # 同市場同代號與前一筆處置重疊（處置延長的正常現象，使用前須合併區間）
+    df = df.sort_values(["market", "code", "kind", "start", "announce"], kind="stable").reset_index(drop=True)
+    prev_end = df.groupby(["market", "code", "kind"])["end"].transform(lambda x: x.cummax().shift())
+    df["overlap_prev"] = (df["kind"] == "處置") & df["start"].notna() & prev_end.notna() & (df["start"] <= prev_end)
     return df
 
 
@@ -186,36 +211,77 @@ def margin_flags():
     df = pd.DataFrame(out, columns=["data_date", "effective", "market", "code", "stop_fin", "stop_short",
                                     "stop_trade", "short_alloc", "fin_alloc", "note_raw", "unknown_codes"])
     df["parse_note"] = ""
+    df["sec_kind"] = sec_kind_series(df["code"])
     df.loc[df.effective.isna(), "parse_note"] = "次一營業日超出交易日曆"
     df.loc[df.unknown_codes != "", "parse_note"] = "註記含官方說明未列符號，資料不足"
     return df
 
 
+MARK_START = {"上市": pd.Timestamp("2013-09-23"), "上櫃": pd.Timestamp("2013-09-18")}   # 官方名單起日
+
+
+def _mark_rows(src):
+    for key, j in _load(src):
+        t = j if src == "twse_mark" else j["tables"][0]
+        header = (t.get("fields") or [""])[-1]
+        yield pd.Timestamp(key), [r for r in (t.get("data") or []) if len(r) >= 5], header
+
+
 def downtick_list():
-    """平盤下得融（借）券賣出名單：在名單內＝當日可平盤下放空（另看三個 * 欄）。"""
+    """平盤下得融（借）券賣出名單：在名單內＝當日該證券受平盤下限制（看 short_susp／sbl_susp／downtick_ban_prev_limit 三個 * 欄）。
+    downtick_ban_prev_limit 的意義隨期間改變，以 ban_rule 標明：「跌停」＝前一交易日收盤跌停；「跌幅達3.5%」＝前一交易日收盤跌幅達 3.5% 以上。"""
     out = []
     for src, market in (("twse_mark", "上市"), ("tpex_mark", "上櫃")):
-        for key, j in _load(src):
-            d = pd.Timestamp(key)
-            rows = j.get("data") if src == "twse_mark" else j["tables"][0].get("data")
-            for r in rows or []:
-                if len(r) < 5:
-                    continue
+        for d, rows, header in _mark_rows(src):
+            rule = ban_rule(d)
+            if src == "tpex_mark" and (("3.5%" in header) != (rule == RULE_DROP35)):
+                raise RuntimeError(f"櫃買名單欄位標題與規則期間不符 {d.date()}: {header}")
+            for r in rows:
                 f = [str(x).strip() == "*" for x in r[2:5]]
-                out.append((d, market, str(r[0]).strip(), *f))
-    return pd.DataFrame(out, columns=["date", "market", "code", "short_susp", "sbl_susp", "downtick_ban_prev_limit"])
+                out.append((d, market, str(r[0]).strip(), *f, rule))
+    df = pd.DataFrame(out, columns=["date", "market", "code", "short_susp", "sbl_susp", "downtick_ban_prev_limit", "ban_rule"])
+    df["sec_kind"] = sec_kind_series(df["code"])
+    return df
+
+
+def downtick_coverage():
+    """平盤下名單逐日覆蓋狀態：有名單／官方回空表（資料缺口）。
+    官方起日後某市場回空表、而另一市場同日有名單者，視為資料缺口（不是當天沒有名單），使用者不得當成『無限制』。"""
+    st = {}
+    for src, market in (("twse_mark", "上市"), ("tpex_mark", "上櫃")):
+        for d, rows, _ in _mark_rows(src):
+            st[(market, d)] = len(rows)
+    out = []
+    for (market, d), n in st.items():
+        if d < MARK_START[market]:
+            continue
+        other = "上櫃" if market == "上市" else "上市"
+        if n > 0:
+            status = "有名單"
+        elif st.get((other, d), 0) > 0:
+            status = "資料缺口（官方回空表，另一市場同日有名單）"
+        else:
+            status = "兩市場皆空（待核）"
+        out.append((d, market, n, status))
+    return pd.DataFrame(sorted(out), columns=["date", "market", "rows", "status"])
 
 
 def fulldelivery():
-    """證交所變更交易（全額交割）每日名單：名單內＝當日須預收款券；period_auction＝分盤集合競價（官方以 ** 表示）。"""
+    """證交所變更交易（全額交割）每日名單：名單內＝當日須預收款券。
+    period_auction＝分盤集合競價（官方以 ** 表示）。官方欄位自 2007-11-01 才有分盤欄；之前為 None（未知），不是 False。"""
     out = []
     for key, j in _load("twse_fulldelivery"):
         d = pd.Timestamp(key)
+        has_col = len(j.get("fields") or []) > 2
         for r in j.get("data") or []:
             if len(r) < 2:
                 continue
-            out.append((d, "上市", str(r[0]).strip(), clean_name(r[1]), len(r) > 2 and str(r[2]).strip() == "**"))
-    return pd.DataFrame(out, columns=["date", "market", "code", "name", "period_auction"])
+            pa = (len(r) > 2 and str(r[2]).strip() == "**") if has_col else None
+            out.append((d, "上市", str(r[0]).strip(), clean_name(r[1]), pa))
+    df = pd.DataFrame(out, columns=["date", "market", "code", "name", "period_auction"])
+    df["period_auction"] = df["period_auction"].astype("boolean")
+    df["sec_kind"] = sec_kind_series(df["code"])
+    return df
 
 
 def _cal():
@@ -240,15 +306,24 @@ def main():
     fd = fulldelivery()
     fd.to_parquet(os.path.join(OUT, "fulldelivery.parquet"), index=False)
     if len(fd):
-        print("fulldelivery", len(fd), fd["date"].min().date(), fd["date"].max().date(), fd["date"].nunique(), "分盤", int(fd["period_auction"].sum()))
+        print("fulldelivery", len(fd), fd["date"].min().date(), fd["date"].max().date(), fd["date"].nunique(), "分盤", int(fd["period_auction"].fillna(False).sum()), "分盤未知", int(fd["period_auction"].isna().sum()))
     dl = downtick_list()
     dl.to_parquet(os.path.join(OUT, "downtick_list.parquet"), index=False)
+    dc = downtick_coverage()
+    dc.to_parquet(os.path.join(OUT, "downtick_coverage.parquet"), index=False)
+    print("downtick_coverage", dc.status.value_counts().to_string())
+    print(dc[dc.status != "有名單"].to_string())
+    print("ban_rule", dl.groupby("ban_rule").date.nunique().to_string())
     print("margin_flags", len(mf), mf.groupby("market").data_date.agg(["min", "max", "nunique"]).to_string())
     print(mf[["stop_fin", "stop_short", "stop_trade", "short_alloc"]].sum().to_string())
     print("margin parse_note", mf.parse_note.value_counts().to_string())
     print("downtick_list", len(dl), dl.groupby("market").date.agg(["min", "max", "nunique"]).to_string())
     print(dl[["short_susp", "sbl_susp", "downtick_ban_prev_limit"]].sum().to_string())
     sv.to_parquet(os.path.join(OUT, "surveillance.parquet"), index=False)
+    print("period_flag", sv.loc[sv.kind == "處置", "period_flag"].value_counts().to_string(), "overlap_prev", int(sv.overlap_prev.sum()))
+    for nm, t in (("surveillance", sv), ("margin_flags", mf), ("downtick_list", dl), ("fulldelivery", fd)):
+        if len(t):
+            print("sec_kind", nm, t["sec_kind"].value_counts().to_dict())
     print("index_daily", len(ix), ix["date"].min().date(), ix["date"].max().date())
     print(ix.notna().sum().to_string())
     print("surveillance", sv.groupby(["market", "kind"]).size().to_string())

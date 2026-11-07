@@ -1,11 +1,12 @@
 name: fetch-phase2
 # 第二期共用資料層：報酬指數、處置／注意、融資融券、平盤下放空名單（官方來源，不受 FinMind 時段限制）。
 # 可續傳，進度存 Release「raw-phase2」；每筆回應核對回傳日期與查詢一致。
+# 每天一次（台北 22:41，官方當日資料公布後）：已定稿的檔案略過；期間尚未結束（當月、當年、當日）的檔案重抓。
 on:
   push:
     paths: ["jobs/phase2.txt"]
   schedule:
-    - cron: "41 */2 * * *"
+    - cron: "41 14 * * *"
   workflow_dispatch:
 permissions: { contents: write }
 jobs:
@@ -29,13 +30,11 @@ jobs:
           gh release view raw-phase2 >/dev/null 2>&1 || gh release create raw-phase2 --title raw-phase2 --notes "第二期共用資料層官方原始檔（自動更新）" --prerelease || true
           gh release download raw-phase2 -p p2-${{ matrix.src }}.tar.gz || true
           [ -f p2-${{ matrix.src }}.tar.gz ] && tar xzf p2-${{ matrix.src }}.tar.gz || mkdir -p raw
-          if [ -f raw/_phase2_${{ matrix.src }}_complete ] && [ "${{ github.event_name }}" != "push" ]; then echo "COMPLETE=1" >> $GITHUB_ENV; fi
           rm -f raw/_phase2_${{ matrix.src }}_complete
       - name: fetch
-        if: env.COMPLETE != '1'
         run: BUDGET_MIN=320 GAP=${{ startsWith(matrix.src, 'twse') && '3' || '1.5' }} python data_layer/fetch_phase2.py ${{ matrix.src }}
       - name: save
-        if: always() && env.COMPLETE != '1'
+        if: always()
         run: |
           n=$(ls raw/phase2/${{ matrix.src }} 2>/dev/null | wc -l); echo "files=$n"
           tar czf p2-${{ matrix.src }}.tar.gz raw
