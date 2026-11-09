@@ -69,7 +69,7 @@ def main():
     ids = [r["stock_id"] for r in csv.DictReader(open(os.path.join(HERE, "targets_2025_annual.csv")))]
     hold = open(os.path.join(OUT, "holdings_text.jsonl"), "a")
     for sid in ids:
-        if sid in prog["done"]:
+        if sid in prog["done"] and prog["done"][sid].get("status") != "no_AI1":  # 舊版只認 AI1，重查
             continue
         if time.time() - T0 > BUDGET:
             print("時間預算用完，下次接續"); break
@@ -78,12 +78,14 @@ def main():
         if blocked(b): stop_blocked("list", sid)
         t = b.decode("big5", "ignore")
         open(os.path.join(OUT, f"{sid}_list.html"), "w").write(t)
-        fn = re.findall(r'readfile2\("A","%s","(\d{6}_%s_AI1\.pdf)"\)' % (sid, sid), t)
+        # 優先合併財報 AI1；沒有時依序用 AI2、AI3（無子公司者只出個體／單一財報）
+        allf = re.findall(r'readfile2\("A","%s","(\d{6}_%s_AI[123]\.pdf)"\)' % (sid, sid), t)
+        fn = sorted(allf, key=lambda x: x[-5])[:1]
         rec = {"sid": sid, "year": YEAR}
         up = re.findall(r"(\d{3}/\d{2}/\d{2}\s+\d{2}:\d{2}:\d{2})", t)
         rec["upload_times"] = up
         if not fn:
-            rec["status"] = "no_AI1"; prog["done"][sid] = rec; save(); continue
+            rec["status"] = "no_AI123"; prog["done"][sid] = rec; save(); continue
         b = req(BASE, {"step": "9", "kind": "A", "co_id": sid, "filename": fn[0]})
         if b is None: continue
         if blocked(b): stop_blocked("step9", sid)
@@ -106,7 +108,7 @@ def main():
             rec["extract_error"] = str(e)[:200]
         json.dump(rec, open(os.path.join(OUT, f"{sid}.json"), "w"), ensure_ascii=False)
         prog["done"][sid] = rec; prog["blocked_runs"] = 0; save()
-    left = len([i for i in ids if i not in prog["done"]])
+    left = len([i for i in ids if i not in prog["done"] or prog["done"][i].get("status") == "no_AI1"])
     prog["remaining"] = left; save(); print(f"完成 {len(prog['done'])}／{len(ids)}，剩 {left}")
 
 
