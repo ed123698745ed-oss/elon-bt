@@ -1,0 +1,48 @@
+name: fetch-064-annual
+# 064 年報附表三試抓（114 年度）。D-064-20261109-2350-1；Ed 2026-11-09 23:59 授權。
+# 原始 PDF 每次執行打包成一個分片上傳 Release「raw-064-annual」（未驗收，非共用資料層）；進度存 state064.tar.gz。
+on:
+  push:
+    paths: ["experiments/064/**", ".github/workflows/fetch-064-annual.yml"]
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+concurrency: { group: fetch-064-annual, cancel-in-progress: false }
+permissions: { contents: write }
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      ROC_YEAR: "114"
+      INTERVAL: "20"
+      BUDGET_MIN: "320"
+      OUT: out064
+      STATE: state064
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install pypdfium2
+      - name: restore progress
+        run: |
+          gh release view raw-064-annual >/dev/null 2>&1 || gh release create raw-064-annual --title raw-064-annual --notes "064 年報附表三試抓原始檔（未驗收，非共用資料層）；分片 pdf-part-*.tar.gz；進度 state064.tar.gz" --prerelease
+          gh release download raw-064-annual -p state064.tar.gz || true
+          [ -f state064.tar.gz ] && tar xzf state064.tar.gz || mkdir -p state064
+          if python -c "import json,sys;p=json.load(open('state064/progress.json'));sys.exit(0 if p.get('remaining',1)==0 or p.get('blocked_runs',0)>=3 else 1)" 2>/dev/null; then echo "SKIP=1" >> $GITHUB_ENV; echo "已完成或已停止"; fi
+      - name: fetch
+        if: env.SKIP != '1'
+        run: python experiments/064/fetch_annual.py || echo "EXIT=$?" >> $GITHUB_ENV
+      - name: save
+        if: always() && env.SKIP != '1'
+        run: |
+          RUN=$(date -u +%Y%m%dT%H%M)
+          tar czf state064.tar.gz state064
+          if [ -n "$(ls out064 2>/dev/null)" ]; then
+            tar czf pdf-part-$RUN.tar.gz out064
+            sha256sum pdf-part-$RUN.tar.gz > pdf-part-$RUN.sha256
+            gh release upload raw-064-annual pdf-part-$RUN.tar.gz pdf-part-$RUN.sha256 --clobber
+          fi
+          gh release upload raw-064-annual state064.tar.gz state064/progress.json --clobber
+          echo "exit=${EXIT:-0}"
