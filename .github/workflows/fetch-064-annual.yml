@@ -29,7 +29,7 @@ jobs:
         run: |
           gh release view raw-064-annual >/dev/null 2>&1 || gh release create raw-064-annual --title raw-064-annual --notes "064 年報附表三試抓原始檔（未驗收，非共用資料層）；分片 pdf-part-*.tar.gz；進度 state064.tar.gz" --prerelease
           gh release download raw-064-annual -p state064.tar.gz || true
-          [ -f state064.tar.gz ] && tar xzf state064.tar.gz || mkdir -p state064
+          if [ -f state064.tar.gz ]; then tar xzf state064.tar.gz; else mkdir -p state064; echo "BUDGET_MIN=12" >> $GITHUB_ENV; echo "首次執行：只跑 12 分鐘驗證流程"; fi
           if python -c "import json,sys;p=json.load(open('state064/progress.json'));sys.exit(0 if p.get('remaining',1)==0 or p.get('blocked_runs',0)>=3 else 1)" 2>/dev/null; then echo "SKIP=1" >> $GITHUB_ENV; echo "已完成或已停止"; fi
       - name: fetch
         if: env.SKIP != '1'
