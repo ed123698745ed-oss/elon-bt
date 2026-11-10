@@ -235,4 +235,5 @@
 
 ## 五、未登記標籤（load() 不會使用，須先登記並送驗收）
 
-（本次無法查詢 GitHub Release 清單）
+- ⚠ `raw-068-revenue`
+- ⚠ `raw-revinst`
