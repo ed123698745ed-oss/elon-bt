@@ -3,12 +3,12 @@ name: fetch-064-annual
 # 原始 PDF 每次執行打包成一個分片上傳 Release「raw-064-annual」（未驗收，非共用資料層）；進度存 state064.tar.gz。
 on:
   push:
-    paths: ["experiments/064/**", ".github/workflows/fetch-064-annual.yml"]
+    paths: ["experiments/064/**"]
   schedule:
     - cron: "17 */6 * * *"
   workflow_dispatch:
 concurrency: { group: fetch-064-annual, cancel-in-progress: false }
-permissions: { contents: write }
+permissions: { contents: write, actions: write }
 jobs:
   fetch:
     runs-on: ubuntu-latest
@@ -46,3 +46,11 @@ jobs:
           fi
           gh release upload raw-064-annual state064.tar.gz state064/progress.json --clobber
           echo "exit=${EXIT:-0}"
+      - name: chain next run
+        # GitHub 排程常延遲數小時；未完成、未被擋時，結束後直接接續下一輪（仍是單一序列、間隔不變）
+        if: always() && env.SKIP != '1' && env.EXIT != '2'
+        run: |
+          left=$(python -c "import json;print(json.load(open('state064/progress.json')).get('remaining',1))")
+          blk=$(python -c "import json;print(json.load(open('state064/progress.json')).get('blocked_runs',0))")
+          echo "remaining=$left blocked_runs=$blk"
+          if [ "$left" != "0" ] && [ "$blk" -lt 3 ]; then gh workflow run fetch-064-annual.yml --ref main; fi
