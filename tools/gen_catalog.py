@@ -97,7 +97,7 @@ def main():
             s = snaps.get(t["tag"], {})
             tr = s.get("tests_exit_code")
             L.append(f"| {g} | {t['tag']} | {STATUS_ICON[t['status']]} {t['status']} | {t['note']} | "
-                     f"{(s.get('code_commit') or '')[:7]} | {'' if tr is None else ('通過' if tr == 0 else '未過')} |")
+                     f"{(s.get('code_commit') or '')[:7]} | {t.get('tests') or ('' if tr is None else ('通過' if tr == 0 else '未過'))} |")
     L += ["", "原始檔倉庫（建置用，不供回測直接讀取）：", ""] + [f"- `{r['tag']}`：{r['note']}" for r in reg["raw"]]
     asof = {t: s.get("source_asof") for t, s in snaps.items() if s.get("source_asof")}
     if asof:

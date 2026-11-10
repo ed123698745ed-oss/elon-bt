@@ -8,7 +8,7 @@ groups:
       - {tag: data-20261105, status: 已被取代, note: 初版；由 r67 起各修正版取代}
       - {tag: data-20261105r67, status: 已被取代, note: 由 r68 取代}
       - {tag: data-20261105r67b, status: 已被取代, note: 由 r68 取代}
-      - {tag: data-20261105r68, status: 已驗收, note: Eve 複審通過（2026-11-06）}
+      - {tag: data-20261105r68, status: 已驗收, note: Eve 複審通過（2026-11-06）, tests: "建置時 1 項因環境缺檔未過，重測 47 過（test_output_retest.txt）"}
       - {tag: data-20261107r69, status: 待複審, note: 退回-69（外部審查）修正版：漲跌停價依日期升降單位、官方基準價鏈等；複審通過前不得正式使用}
   phase2:
     title: 第二期｜指數、處置注意、融資融券註記、平盤下名單、變更交易
