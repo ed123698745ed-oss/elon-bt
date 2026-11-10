@@ -346,6 +346,13 @@ def build_daily(px: pd.DataFrame, ex: pd.DataFrame, ca: pd.DataFrame | None = No
     for c in ("open", "high", "low", "close"):
         px.loc[px["no_trade"], c] = None
     LOG["daily_k"]["no_trade_rows"] = int(px["no_trade"].sum())
+    # 退回-70（自查）：有量有收盤、但開／高／低為 0 的列（FinMind 1996、2003～2004 年，571 列）——0 不是價格，改空值並註記，不推估
+    zero = ~px["no_trade"] & ((px["open"] <= 0) | (px["high"] <= 0) | (px["low"] <= 0))
+    for c in ("open", "high", "low"):
+        px.loc[zero & (px[c] <= 0), c] = None
+    px["price_note"] = None
+    px.loc[zero, "price_note"] = "開高低為 0（來源異常），已改空值"
+    LOG["daily_k"]["zero_ohl_rows"] = int(zero.sum())
     # 前收只在同一段連續掛牌期間內取（跨隔離列以前一個主日K收盤為準；轉板不中斷）
     px["prev_close"] = px.groupby("stock_id")["close"].transform(lambda c: c.ffill().shift(1))
     px = px.merge(ex[["date", "stock_id", "ref", "limit_up", "limit_down"]].drop_duplicates(["date", "stock_id"]).rename(
@@ -383,6 +390,14 @@ def build_daily(px: pd.DataFrame, ex: pd.DataFrame, ca: pd.DataFrame | None = No
         long_gap = px["jump_flag"] & (px["prev_gap_days"] > 5)
         px.loc[long_gap, "jump_reason"] = "超出漲跌停且查無公司行動；前一成交日距今超過 5 個交易日（中間缺行情或停牌）"
         LOG["daily_k"]["jump_long_gap_rows"] = int(long_gap.sum())
+    # 退回-70（自查）：收盤在漲跌停內、但盤中高／低超出推算漲跌停 → 推算值不可靠（多為缺公司行動或官方參考價的除權息日、
+    # 櫃買官方表過期日），限價來源改「待查」，成交判定一律資料不足；收盤也超出者已由跳動旗標處理
+    intraday_out = ~px["no_trade"] & ~nolim & ~px["jump_flag"] & px["limit_up"].notna() & \
+        ~px["limit_src"].str.startswith("待查") & (px["limit_src"] != "缺參考價") & \
+        ((px["high"] > px["limit_up"] + tol) | (px["low"] < px["limit_down"] - tol))
+    px.loc[intraday_out, "limit_src"] = "待查（盤中價超出推算漲跌停）"
+    px.loc[zero & ~nolim, "limit_src"] = "待查（開高低為0）"
+    LOG["daily_k"]["intraday_out_rows"] = int(intraday_out.sum())
     LOG["daily_k"].update(rows=len(px), official_limit_rows=int((px["limit_src"] == "官方除權息表").sum()),
                           limit_src=px["limit_src"].value_counts().to_dict(), jump_rows=int(px["jump_flag"].sum()))
     return px.drop(columns=["ref_off", "up_off", "dn_off", "prev_date"])

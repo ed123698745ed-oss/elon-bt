@@ -79,7 +79,7 @@ def test_limit_src_values_known():
     s = pd.read_parquet(os.path.join(OUT, "daily_k.parquet"), columns=["limit_src"])["limit_src"].unique()
     allowed = {"官方除權息表", "官方行情表（櫃買次日漲跌停）", "規則（官方基準價鏈）", "官方減資參考價＋規則", "規則",
                "無漲跌幅（初次掛牌前五日）", "無漲跌幅（櫃買官方）", "待查（過渡期初次掛牌前五日）",
-               "待查（前一交易日無成交，基準價未驗證）", "缺參考價"}
+               "待查（前一交易日無成交，基準價未驗證）", "缺參考價", "待查（盤中價超出推算漲跌停）", "待查（開高低為0）"}
     assert set(s) <= allowed, set(s) - allowed
 
 
@@ -125,3 +125,24 @@ def test_r70_low_price_limit_at_least_one_tick():
     for ref in (0.05, 0.08, 0.1, 0.13, 0.14):
         u, d = limit_prices(ref, "2005-06-16")
         assert u > ref and d < ref
+
+
+
+@need_out
+def test_r70_no_unflagged_price_outside_limits():
+    """自查（退回-70）：凡成交價超出推算漲跌停的列，必須已標跳動或限價來源為待查／缺參考價／無漲跌幅；開高低不得為 0。"""
+    d = pd.read_parquet(os.path.join(OUT, "daily_k.parquet"),
+                        columns=["open", "high", "low", "close", "limit_up", "limit_down", "limit_src", "jump_flag", "no_trade", "price_note"])
+    t = d[~d["no_trade"]]
+    assert not ((t["open"] <= 0) | (t["high"] <= 0) | (t["low"] <= 0)).any()
+    out = (t["high"] > t["limit_up"] + 1e-9) | (t["low"] < t["limit_down"] - 1e-9)
+    ok = t["jump_flag"] | t["limit_src"].str.startswith("待查") | (t["limit_src"] == "缺參考價") | t["limit_src"].str.startswith("無漲跌幅")
+    assert not (out & ~ok).any(), int((out & ~ok).sum())
+
+
+def test_r70_judge_fill_insufficient_for_new_pending_sources():
+    from framework.market import judge_fill
+    for src in ("待查（盤中價超出推算漲跌停）", "待查（開高低為0）"):
+        bar = {"open": 10, "high": 10, "low": 10, "close": 10, "volume": 1000, "limit_up": 11, "limit_down": 9, "limit_src": src}
+        f = judge_fill(bar, "long", "entry", "open")
+        assert f.insufficient and not f.ok
