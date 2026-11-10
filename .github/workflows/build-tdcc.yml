@@ -1,0 +1,55 @@
+name: build-tdcc
+# 集保戶股權分散週表（tdcc_dist）：原檔由 Elon 放在暫存分支 incoming-tdcc（raw/*.json.gz＋SHA256SUMS），
+# 本流程核對雜湊、建表、跑測試後發布 Release（含原檔），完成後刪除暫存分支；main 不放資料檔。
+# 標籤由 jobs/tdcc_build.txt 的 tag= 指定；已存在就停止（不覆蓋）。
+on:
+  push:
+    paths: ["jobs/tdcc_build.txt"]
+  workflow_dispatch:
+permissions: { contents: write }
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install pandas pyarrow pytest pyyaml
+      - name: tag
+        run: |
+          TAG=$(grep '^tag=' jobs/tdcc_build.txt | cut -d= -f2)
+          echo "TAG=$TAG" >> $GITHUB_ENV
+          if gh release view "$TAG" >/dev/null 2>&1; then echo "release $TAG 已存在，停止"; exit 1; fi
+      - name: get raw
+        run: |
+          git fetch origin incoming-tdcc
+          mkdir -p in && git --work-tree=in checkout origin/incoming-tdcc -- raw
+          cd in/raw && sha256sum -c SHA256SUMS && gunzip -k *.json.gz && ls -la
+      - name: build
+        run: python data_layer/tdcc_dist.py out in/raw/*.json | tee out_build.txt
+      - name: tests
+        run: python -m pytest -q tests/test_tdcc_dist.py | tee out/test_output.txt
+      - name: manifest
+        run: |
+          python - <<'PY'
+          import json, hashlib, datetime, os, subprocess
+          log = json.load(open("out/tdcc_dist_log.json"))
+          sha = lambda p: hashlib.sha256(open(p, "rb").read()).hexdigest()
+          m = {"built_at": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
+               "files": {"tdcc_dist.parquet": {"rows": log["rows"], "sha256": sha("out/tdcc_dist.parquet")}},
+               "raw_files": {k: {"sha256": v} for k, v in log["raw_files"].items()},
+               "source": "Goodinfo EquityDistributionClassHis（集保結算所集保戶股權分散表週統計，簡化 8 級）",
+               "checks": {k: log[k] for k in ("stocks", "date_min", "date_max", "overlap_rows", "overlap_conflicts", "people_sum_mismatch", "ratio_sum_range")},
+               "code_commit": subprocess.check_output(["git", "rev-parse", "HEAD"]).decode().strip(),
+               "data_tag": os.environ["TAG"]}
+          json.dump(m, open("out/manifest.json", "w"), ensure_ascii=False, indent=1)
+          print(json.dumps(m["checks"], ensure_ascii=False))
+          PY
+          cp in/raw/*.json.gz in/raw/SHA256SUMS out/
+      - name: release
+        run: |
+          gh release create "$TAG" --title "$TAG 集保戶股權分散週表" --notes "tdcc_dist.parquet（053 股票池 98 檔，Goodinfo 簡化 8 級）；清冊 manifest.json；建置日誌 tdcc_dist_log.json；測試 test_output.txt；原檔 *.json.gz（SHA256SUMS）。驗收狀態見 data_catalog/registry.yml。" out/*
+          git push origin --delete incoming-tdcc
