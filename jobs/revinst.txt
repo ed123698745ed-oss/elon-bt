@@ -1,0 +1,2 @@
+revinst request 2026-11-11T00:16+08:00 (Ed：月營收與三大法人加進共用資料層，夜間下載；D-067-20261111-0016-1)
+後續：Release revinst-YYYYMMDD 發佈後，在 registry.yml 新增 revinst 組（month_revenue、institutional）並送 Eve 驗收；驗收前以候選標籤使用。

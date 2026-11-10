@@ -1,0 +1,64 @@
+name: fetch-revinst
+# 月營收與三大法人原始資料下載，進度存在 Release「raw-revinst」（Ed 2026-11-11 00:16，D-067-20261111-0016-1）。
+# 夜間下載（台北 17:00～隔日 08:00）；全部抓完後建置並發佈 Release revinst-YYYYMMDD。
+on:
+  push:
+    paths: ["jobs/revinst.txt"]
+  schedule:
+    - cron: "35 9,15,21 * * *"   # 台北 17:35、23:35、05:35 接續；抓完後自動跳過
+  workflow_dispatch:
+concurrency: { group: fetch-revinst, cancel-in-progress: false }
+permissions: { contents: write }
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      FINMIND_TOKEN_1: ${{ secrets.FINMIND_TOKEN_1 }}
+      FINMIND_TOKEN_2: ${{ secrets.FINMIND_TOKEN_2 }}
+      FINMIND_TOKEN_3: ${{ secrets.FINMIND_TOKEN_3 }}
+      FINMIND_TOKEN_4: ${{ secrets.FINMIND_TOKEN_4 }}
+      RAW_DIR: raw_ri
+      OUT_DIR: out_ri
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install pandas pyarrow
+      - name: already published?
+        run: |
+          if gh release list --limit 100 | grep -q '^revinst-\|	revinst-'; then echo "SKIP=1" >> $GITHUB_ENV; echo "已有 revinst- 版本，跳過"; fi
+      - name: restore progress and universe
+        if: env.SKIP != '1'
+        run: |
+          gh release view raw-revinst >/dev/null 2>&1 || gh release create raw-revinst --title raw-revinst --notes "月營收與法人原始資料下載進度（自動更新）" --prerelease
+          gh release download raw-revinst -p raw-revinst.tar.gz || true
+          [ -f raw-revinst.tar.gz ] && tar xzf raw-revinst.tar.gz || mkdir -p raw_ri
+          # 代號清單沿用第一期 raw-progress（與 data-20261105 同一份 TaiwanStockInfo／TaiwanStockDelisting）
+          gh release download raw-progress -p raw-progress.tar.gz
+          tar xzf raw-progress.tar.gz raw/finmind/TaiwanStockInfo raw/finmind/TaiwanStockDelisting
+          mkdir -p raw_ri/finmind && cp -r raw/finmind/TaiwanStockInfo raw/finmind/TaiwanStockDelisting raw_ri/finmind/
+          rm -rf raw raw-progress.tar.gz
+      - name: fetch
+        if: env.SKIP != '1'
+        run: ALLOW_HOURS=17-8 BUDGET_MIN=320 python data_layer/fetch_revinst.py fetch
+      - name: save progress
+        if: always() && env.SKIP != '1'
+        run: |
+          tar czf raw-revinst.tar.gz raw_ri
+          sha256sum raw-revinst.tar.gz | tee raw-revinst.sha256
+          files="raw-revinst.tar.gz raw-revinst.sha256"
+          for f in raw_ri/_attempts_finmind.csv raw_ri/_status_revinst.json; do [ -s "$f" ] && files="$files $f"; done
+          gh release upload raw-revinst $files --clobber
+      - name: build and publish when complete
+        if: env.SKIP != '1'
+        run: |
+          left=$(python -c "import json;print(json.load(open('raw_ri/_status_revinst.json'))['remaining'])")
+          echo "remaining=$left"
+          [ "$left" = "0" ] || exit 0
+          python data_layer/fetch_revinst.py build
+          TAG=revinst-$(TZ=Asia/Taipei date +%Y%m%d)
+          if gh release view "$TAG" >/dev/null 2>&1; then echo "release $TAG 已存在，停止"; exit 1; fi
+          cp raw-revinst.tar.gz raw-revinst.sha256 out_ri/
+          gh release create "$TAG" --title "$TAG 月營收與三大法人" --notes "month_revenue.parquet、institutional.parquet（FinMind 現行值）；清冊 manifest_revinst.json；原始資料 raw-revinst.tar.gz；程式版本見 manifest_revinst.code_commit" out_ri/*
