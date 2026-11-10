@@ -2,14 +2,17 @@ name: fetch-068-rev
 # 068 快篩月營收原始下載（FinMind TaiwanStockMonthRevenue，2011-01～2022-06，只到樣本內切點）。
 # D-068-20261111-0018-1（Ed 2026-11-11 00:18「照建議」）；非共用資料層、未驗收，列資料層待補清單。
 # 原始回傳與請求紀錄打包上傳 Release「raw-068-revenue」（prerelease）；可續傳。
+# 2026-11-11 停用：D-068-20261111-0055-1（Ed 00:55「好」）改用共用資料層 fetch-revinst 發佈的 month_revenue，避免搶同一批 token。
+# 本次推送以 cancel-in-progress 取消執行中的下載，job 停用（if: false）；已下載部分照常存檔。
 on:
   push:
     paths: ["experiments/068/fetch_rev.py", "experiments/068/ids068.txt", ".github/workflows/fetch-068-rev.yml"]
   workflow_dispatch:
-concurrency: { group: fetch-068-rev, cancel-in-progress: false }
+concurrency: { group: fetch-068-rev, cancel-in-progress: true }
 permissions: { contents: write }
 jobs:
   fetch:
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
