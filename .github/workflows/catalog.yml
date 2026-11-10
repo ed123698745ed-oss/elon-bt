@@ -1,0 +1,29 @@
+name: catalog
+# 資料清單 CATALOG.md 自動更新：建置完成、或登記簿／表說明變更時重產；有差異才提交。
+on:
+  workflow_run:
+    workflows: [build-data, build-phase2]
+    types: [completed]
+  push:
+    paths: ["data_catalog/registry.yml", "data_catalog/tables.yml", "tools/gen_catalog.py", "data_catalog/remote.py"]
+  workflow_dispatch:
+permissions: { contents: write }
+concurrency: { group: catalog, cancel-in-progress: false }
+jobs:
+  gen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install pandas pyarrow pyyaml pytest
+      - run: python tools/gen_catalog.py
+      - run: python -m pytest -q tests/test_catalog.py
+      - name: commit
+        run: |
+          git add CATALOG.md data_catalog/schemas
+          if git diff --cached --quiet; then echo "清單無變化"; exit 0; fi
+          git -c user.name="catalog-bot" -c user.email="actions@users.noreply.github.com" commit -m "清單：自動更新 CATALOG.md"
+          git push

@@ -1,0 +1,113 @@
+# 每張表的說明（人工撰寫）；欄位、筆數、期間由 tools/gen_catalog.py 自動讀取。
+calendar:
+  group: phase1
+  title: 交易日曆
+  use: 所有交易日推算（持有天數、次一交易日）的唯一依據
+  key: date
+  timing: 事前已知
+  caveats: 以 FinMind 交易日剔除全市場無成交日；1,300 天官方未取得無法核對（見 calendar_check）
+calendar_check:
+  group: phase1
+  title: 交易日曆官方核對
+  use: 查某日是否經證交所／櫃買官方核對
+  key: date
+  timing: 查核用
+  caveats: verdict＝一致／官方未取得
+daily_k:
+  group: phase1
+  title: 上市櫃日K（含已下市）
+  use: 價格、成交量、市場別、漲跌停價、能否成交
+  key: date + stock_id
+  timing: 當日收盤後
+  caveats: limit_src 為「待查」「缺參考價」的列算資料不足，不可判定成交；no_limit_status 標新上市前五日無漲跌幅；jump_flag 為異常跳動旗標；2004-02-11 前上市無官方基準價
+daily_k_quarantine:
+  group: phase1
+  title: 隔離的日K
+  use: 只供查核，不供回測
+  key: date + stock_id
+  timing: 查核用
+  caveats: 興櫃／未掛牌／已下市而官方查無者，及 2004-02-11 前上市身分未證實者
+corp_actions:
+  group: phase1
+  title: 公司行動（除權息、減資、現增、面額變更）
+  use: 還原報酬、配股可賣日、減資恢復日
+  key: stock_id + ex_date + kind
+  timing: 以 announced 公告日後可得；ex_date 為除權息日
+  caveats: flag 欄列出資料不足原因（例：配股可賣日、無法拆分權息）；share_ratio_inferred 為反推值只供比對；除權息未分類 3,320 筆
+official_exright:
+  group: phase1
+  title: 官方除權息參考價表
+  use: 除權息日參考價與漲跌停
+  key: date + stock_id
+  timing: 除權息日前公告
+  caveats: 來源 TWSE TWT49U、TPEx 除權除息計算結果
+listing_periods:
+  group: phase1
+  title: 掛牌期間
+  use: 當時母體（universe_on 唯一接受的輸入）
+  key: stock_id + market + start
+  timing: 事前已知
+  caveats: 以官方逐日市場別為主
+market_segments:
+  group: phase1
+  title: 市場別區段
+  use: 上市／上櫃轉換時點
+  key: stock_id + start
+  timing: 事前已知
+  caveats: src 為 TPEx 每日收盤行情、TWSE MI_INDEX 等
+status:
+  group: phase1
+  title: 個股掛牌狀態
+  use: 上市／上櫃／未定，及有無官方上市櫃日
+  key: stock_id
+  timing: 查核用
+  caveats: 472 檔「上市或上櫃未定」；verified＝False 者無官方上市櫃日
+index_daily:
+  group: phase2
+  title: 指數日資料
+  use: 加權與櫃買開高低收、加權報酬指數（超額報酬基準）
+  key: date
+  timing: 當日收盤後
+  caveats: 加權報酬指數只有收盤、2003 年起；櫃買報酬指數無官方歷史，不提供
+surveillance:
+  group: phase2
+  title: 處置與注意公告
+  use: 處置期間、注意股事件
+  key: market + kind + announce + code + start + reason
+  timing: 公布日收盤後可得，最早次一交易日使用
+  caveats: 先用 sec_kind 篩證券類型；處置區間重疊請用 phase2_tools.disposal_intervals 合併；period_flag 標取消／恢復、起訖同日、期間逾 60 日；parse_note 標休市日等待核項目
+margin_flags:
+  group: phase2
+  title: 融資融券註記（停資、停券、停止買賣）
+  use: 放空腿能否融券、停止買賣
+  key: market + data_date + code
+  timing: data_date 收盤後公布，effective（次一交易日）生效
+  caveats: 上市 2001 起、上櫃 2007 起；櫃買 $、E 符號官方未列（21,947 筆資料不足）；早年代碼含義未驗證
+downtick_list:
+  group: phase2
+  title: 平盤下得融（借）券賣出名單
+  use: 當日能否平盤下放空
+  key: date + market + code
+  timing: 當日開盤前已知
+  caveats: 2013-09 起；downtick_ban_prev_limit 的意義看 ban_rule（跌停／跌幅達3.5%）；不在名單者不可平盤下放空；缺口日見 downtick_coverage
+downtick_coverage:
+  group: phase2
+  title: 平盤下名單逐日覆蓋狀態
+  use: 判斷某市場某日名單是有資料還是缺口
+  key: date + market
+  timing: 查核用
+  caveats: 櫃買 2019-10-02 為資料缺口（官方回空表），不可當成無限制
+fulldelivery:
+  group: phase2
+  title: 證交所變更交易（全額交割）名單
+  use: 預收款券、分盤集合競價
+  key: date + code
+  timing: 當日
+  caveats: 只有上市，2004-12-24 起；period_auction 在 2007-11-01 前為空值（未知）；櫃買變更交易無官方歷史
+financials:
+  group: fin
+  title: 財報（綜合損益表、資產負債表）
+  use: 財報類多空卡的基本面數字
+  key: stock_id + date + dataset + type
+  timing: date 為財報期末，不是公告日；可得時點須依法定申報期限另行推算
+  caveats: FinMind 現行（最終修訂）值，非公告當時版本；重編影響須在個案揭露；長表格式（type＝科目、value＝數值）

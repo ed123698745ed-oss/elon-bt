@@ -1,0 +1,46 @@
+{
+ "tag": "fin-20261107",
+ "manifest": "manifest_fin.json",
+ "code_commit": "7c7b6f07f25de17b772c111f5c46c7f1ad4196e1",
+ "tests_exit_code": null,
+ "source_asof": null,
+ "tables": {
+  "financials": {
+   "rows": 10466736,
+   "size": 53075664,
+   "columns": [
+    {
+     "name": "stock_id",
+     "type": "large_string"
+    },
+    {
+     "name": "date",
+     "type": "large_string"
+    },
+    {
+     "name": "dataset",
+     "type": "large_string"
+    },
+    {
+     "name": "type",
+     "type": "large_string"
+    },
+    {
+     "name": "value",
+     "type": "double"
+    },
+    {
+     "name": "origin_name",
+     "type": "large_string"
+    }
+   ],
+   "ranges": {
+    "date": [
+     "1990-03-31",
+     "2026-09-30"
+    ]
+   },
+   "sha256": "ddca3df0edef968728952a07552a95847223b9d6ac744e0feaf2d99a22c51624"
+  }
+ }
+}

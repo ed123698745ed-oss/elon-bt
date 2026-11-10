@@ -1,0 +1,462 @@
+{
+ "tag": "data-20261107r69",
+ "manifest": "manifest.json",
+ "code_commit": "7c7b6f07f25de17b772c111f5c46c7f1ad4196e1",
+ "tests_exit_code": 0,
+ "source_asof": null,
+ "tables": {
+  "calendar": {
+   "rows": 6894,
+   "size": 61531,
+   "columns": [
+    {
+     "name": "date",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "source",
+     "type": "large_string"
+    }
+   ],
+   "ranges": {
+    "date": [
+     "1999-01-05",
+     "2026-11-03"
+    ]
+   },
+   "sha256": "5e4f8263547ae68a1f3e79beceb9b940d6e427dfa8847e5463c77341e36db678"
+  },
+  "status": {
+   "rows": 3252,
+   "size": 43557,
+   "columns": [
+    {
+     "name": "stock_id",
+     "type": "large_string"
+    },
+    {
+     "name": "status",
+     "type": "large_string"
+    },
+    {
+     "name": "src",
+     "type": "large_string"
+    },
+    {
+     "name": "start_date",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "end_date",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "verified",
+     "type": "bool"
+    }
+   ],
+   "ranges": {
+    "start_date": [
+     "1962-02-09",
+     "2026-10-30"
+    ],
+    "end_date": [
+     "1995-09-23",
+     "2026-10-01"
+    ]
+   },
+   "sha256": "c65e57653fcdc922ebb4559c936ecf2464620c8e3bf7f38f0cba191150249f21"
+  },
+  "daily_k": {
+   "rows": 9683930,
+   "size": 237623396,
+   "columns": [
+    {
+     "name": "date",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "stock_id",
+     "type": "large_string"
+    },
+    {
+     "name": "open",
+     "type": "double"
+    },
+    {
+     "name": "high",
+     "type": "double"
+    },
+    {
+     "name": "low",
+     "type": "double"
+    },
+    {
+     "name": "close",
+     "type": "double"
+    },
+    {
+     "name": "volume",
+     "type": "int64"
+    },
+    {
+     "name": "amount",
+     "type": "int64"
+    },
+    {
+     "name": "market",
+     "type": "large_string"
+    },
+    {
+     "name": "market_src",
+     "type": "large_string"
+    },
+    {
+     "name": "no_trade",
+     "type": "bool"
+    },
+    {
+     "name": "prev_close",
+     "type": "double"
+    },
+    {
+     "name": "no_limit_status",
+     "type": "large_string"
+    },
+    {
+     "name": "no_limit_src",
+     "type": "large_string"
+    },
+    {
+     "name": "limit_src",
+     "type": "large_string"
+    },
+    {
+     "name": "limit_up",
+     "type": "double"
+    },
+    {
+     "name": "limit_down",
+     "type": "double"
+    },
+    {
+     "name": "ref_price",
+     "type": "double"
+    },
+    {
+     "name": "jump_flag",
+     "type": "bool"
+    },
+    {
+     "name": "jump_reason",
+     "type": "large_string"
+    },
+    {
+     "name": "prev_gap_days",
+     "type": "int64"
+    }
+   ],
+   "ranges": {
+    "date": [
+     "1992-01-04",
+     "2026-11-03"
+    ]
+   },
+   "sha256": "718f1c61ebab87499224482eac67f122931e67abbcd538b0ca051c1c6b568ff3"
+  },
+  "official_exright": {
+   "rows": 34664,
+   "size": 634554,
+   "columns": [
+    {
+     "name": "date",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "stock_id",
+     "type": "large_string"
+    },
+    {
+     "name": "prev_close",
+     "type": "double"
+    },
+    {
+     "name": "ref",
+     "type": "double"
+    },
+    {
+     "name": "limit_up",
+     "type": "double"
+    },
+    {
+     "name": "limit_down",
+     "type": "double"
+    },
+    {
+     "name": "kind",
+     "type": "large_string"
+    },
+    {
+     "name": "cash",
+     "type": "double"
+    },
+    {
+     "name": "stock_per_k",
+     "type": "double"
+    },
+    {
+     "name": "wv",
+     "type": "double"
+    },
+    {
+     "name": "rights_sh",
+     "type": "double"
+    },
+    {
+     "name": "src",
+     "type": "large_string"
+    }
+   ],
+   "ranges": {
+    "date": [
+     "2000-09-01",
+     "2026-11-05"
+    ]
+   },
+   "sha256": "2aa542abcb4666e5ab25a82d81cb3ca025396d523996554cea3364e9d728b509"
+  },
+  "corp_actions": {
+   "rows": 42664,
+   "size": 717576,
+   "columns": [
+    {
+     "name": "stock_id",
+     "type": "large_string"
+    },
+    {
+     "name": "ex_date",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "kind",
+     "type": "large_string"
+    },
+    {
+     "name": "cash",
+     "type": "double"
+    },
+    {
+     "name": "share_ratio",
+     "type": "double"
+    },
+    {
+     "name": "cash_date",
+     "type": "string"
+    },
+    {
+     "name": "announced",
+     "type": "string"
+    },
+    {
+     "name": "source",
+     "type": "large_string"
+    },
+    {
+     "name": "flag",
+     "type": "large_string"
+    },
+    {
+     "name": "reduction_reason",
+     "type": "large_string"
+    },
+    {
+     "name": "ratio_basis",
+     "type": "large_string"
+    },
+    {
+     "name": "share_ratio_inferred",
+     "type": "double"
+    }
+   ],
+   "ranges": {
+    "ex_date": [
+     "2000-09-01",
+     "2026-12-29"
+    ]
+   },
+   "sha256": "999bb9ca995afc4ecb06a7e9566c040c4f1b5583a56b45f97e38ed4f6eadafac"
+  },
+  "daily_k_quarantine": {
+   "rows": 567476,
+   "size": 9899367,
+   "columns": [
+    {
+     "name": "date",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "stock_id",
+     "type": "large_string"
+    },
+    {
+     "name": "open",
+     "type": "double"
+    },
+    {
+     "name": "high",
+     "type": "double"
+    },
+    {
+     "name": "low",
+     "type": "double"
+    },
+    {
+     "name": "close",
+     "type": "double"
+    },
+    {
+     "name": "volume",
+     "type": "int64"
+    },
+    {
+     "name": "amount",
+     "type": "int64"
+    },
+    {
+     "name": "market",
+     "type": "large_string"
+    },
+    {
+     "name": "market_src",
+     "type": "large_string"
+    },
+    {
+     "name": "quarantine_reason",
+     "type": "large_string"
+    }
+   ],
+   "ranges": {
+    "date": [
+     "1992-01-04",
+     "2026-10-29"
+    ]
+   },
+   "sha256": "2192a121cf6b8fad0eef6d9e76e9435f154da294d5fff2a8ba60c77d1dc9023b"
+  },
+  "market_segments": {
+   "rows": 162419,
+   "size": 1208139,
+   "columns": [
+    {
+     "name": "stock_id",
+     "type": "large_string"
+    },
+    {
+     "name": "market",
+     "type": "large_string"
+    },
+    {
+     "name": "start",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "end",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "days",
+     "type": "int64"
+    },
+    {
+     "name": "src",
+     "type": "large_string"
+    },
+    {
+     "name": "initial",
+     "type": "bool"
+    }
+   ],
+   "ranges": {
+    "start": [
+     "1999-01-05",
+     "2026-11-03"
+    ],
+    "end": [
+     "1999-01-30",
+     "2026-11-03"
+    ]
+   },
+   "sha256": "f048c7681304e1da7c3979dfa66d103ab55d83022b51ac2e5494b4acd6d45911"
+  },
+  "calendar_check": {
+   "rows": 6894,
+   "size": 62965,
+   "columns": [
+    {
+     "name": "date",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "finmind_calendar",
+     "type": "bool"
+    },
+    {
+     "name": "twse_official",
+     "type": "bool"
+    },
+    {
+     "name": "tpex_official",
+     "type": "bool"
+    },
+    {
+     "name": "verdict",
+     "type": "large_string"
+    }
+   ],
+   "ranges": {
+    "date": [
+     "1999-01-05",
+     "2026-11-03"
+    ]
+   },
+   "sha256": "da590ec8da39c59e0197365fd47c9e7ea989243c944f0536364e171678c75ff1"
+  },
+  "listing_periods": {
+   "rows": 161403,
+   "size": 946084,
+   "columns": [
+    {
+     "name": "stock_id",
+     "type": "large_string"
+    },
+    {
+     "name": "market",
+     "type": "large_string"
+    },
+    {
+     "name": "start",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "end",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "basis",
+     "type": "large_string"
+    }
+   ],
+   "ranges": {
+    "start": [
+     "1962-02-09",
+     "2026-11-03"
+    ],
+    "end": [
+     "2003-08-01",
+     "2099-12-31"
+    ]
+   },
+   "sha256": "f10a2733d344dc41dd86497bb57e71a8dbd3da23be26942f349584f22a0a60f9"
+  }
+ }
+}
