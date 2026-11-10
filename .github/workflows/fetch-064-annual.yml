@@ -18,6 +18,7 @@ jobs:
       ROC_YEAR: "114"
       INTERVAL: "20"
       BUDGET_MIN: "320"
+      MAX_DONE: "500"
       OUT: out064
       STATE: state064
     steps:

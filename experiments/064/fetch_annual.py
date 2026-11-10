@@ -67,10 +67,17 @@ def main():
     if prog.get("blocked_runs", 0) >= 3:
         print("已連續被擋 3 次，停止抓取等 Ed 決定"); return
     ids = [r["stock_id"] for r in csv.DictReader(open(os.path.join(HERE, "targets_2025_annual.csv")))]
+    MAX_DONE = int(os.environ.get("MAX_DONE", "0"))  # D-064-20261111-0052-1：抽約 500 家即停
+    def capped():
+        if MAX_DONE and len(prog["done"]) >= MAX_DONE:
+            prog["capped"] = MAX_DONE; prog["remaining"] = 0; save(); print(f"已達 {MAX_DONE} 家上限，停止"); return True
+        return False
+    if capped(): return
     hold = open(os.path.join(OUT, "holdings_text.jsonl"), "a")
     for sid in ids:
         if sid in prog["done"] and prog["done"][sid].get("status") != "no_AI1":  # 舊版只認 AI1，重查
             continue
+        if capped(): return
         if time.time() - T0 > BUDGET:
             print("時間預算用完，下次接續"); break
         b = req(f"{BASE}?step=1&colorchg=1&co_id={sid}&year={YEAR}&seamon=4&mtype=A")
