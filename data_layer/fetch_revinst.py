@@ -4,7 +4,7 @@ Ed 2026-11-11 00:16：「把月營收和三大法人資料加進 elon-bt 共用�
 - 資料集：TaiwanStockMonthRevenue（月營收）、TaiwanStockInstitutionalInvestorsBuySell（三大法人買賣超，FinMind 自 2012-05 起）。
 - 代號範圍：沿用第一期 universe()（上市、上櫃現行 ∪ 已下市，4 碼），清單取自 raw-progress 的 TaiwanStockInfo／TaiwanStockDelisting。
 - 只存原樣回傳；月營收為 FinMind 現行值，不是公告當時版本；可得時點由各案依法定期限（次月 10 日）另定。
-- 下載時段：夜間（ALLOW_HOURS，預設 17-8）。全部抓完後建 month_revenue.parquet、institutional.parquet 與 manifest_revinst.json；缺值不推估。
+- 下載時段：不限（工作流程設 ALLOW_HOURS 為空；Ed 2026-11-11 00:49「不用限定時間,有token就用」）。全部抓完後建 month_revenue.parquet、institutional.parquet 與 manifest_revinst.json；缺值不推估。
 
 環境變數：RAW_DIR（預設 raw_ri）、OUT_DIR（預設 out_ri）、BUDGET_MIN、ALLOW_HOURS、FINMIND_TOKEN_1..4。
 """

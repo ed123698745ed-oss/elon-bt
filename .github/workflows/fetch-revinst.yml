@@ -1,11 +1,11 @@
 name: fetch-revinst
 # 月營收與三大法人原始資料下載，進度存在 Release「raw-revinst」（Ed 2026-11-11 00:16，D-067-20261111-0016-1）。
-# 夜間下載（台北 17:00～隔日 08:00）；全部抓完後建置並發佈 Release revinst-YYYYMMDD。
+# 不限時段，有 token 額度就下載（Ed 2026-11-11 00:49，D-067-20261111-0049-1）；全部抓完後建置並發佈 Release revinst-YYYYMMDD。
 on:
   push:
     paths: ["jobs/revinst.txt"]
   schedule:
-    - cron: "35 9,15,21 * * *"   # 台北 17:35、23:35、05:35 接續；抓完後自動跳過
+    - cron: "35 */6 * * *"   # 每 6 小時接續（不限時段）；抓完後自動跳過
   workflow_dispatch:
 concurrency: { group: fetch-revinst, cancel-in-progress: false }
 permissions: { contents: write }
@@ -42,7 +42,7 @@ jobs:
           rm -rf raw raw-progress.tar.gz
       - name: fetch
         if: env.SKIP != '1'
-        run: ALLOW_HOURS=17-8 BUDGET_MIN=320 python data_layer/fetch_revinst.py fetch
+        run: ALLOW_HOURS= BUDGET_MIN=320 python data_layer/fetch_revinst.py fetch
       - name: save progress
         if: always() && env.SKIP != '1'
         run: |
