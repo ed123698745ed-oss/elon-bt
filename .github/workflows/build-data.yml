@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - run: pip install pandas pyarrow numpy scipy pytest tabulate
+      - run: pip install pandas pyarrow numpy scipy pytest tabulate pyyaml
       - name: get raw
         run: |
           gh release download raw-progress -p raw-progress.tar.gz
@@ -29,9 +29,12 @@ jobs:
       - name: tests (data layer)
         run: |
           set +e
-          ELON_OUT=out BT_STATS_PATH=none python -m pytest -q -rA tests/ > out/test_output.txt 2>&1
+          ELON_OUT=out BT_STATS_PATH=none python -m pytest -q -rA tests/ --ignore=tests/test_phase2.py > out/test_output.txt 2>&1
           echo "TEST_RC=$?" >> $GITHUB_ENV
           tail -30 out/test_output.txt
+      - name: tests must pass
+        run: |
+          if [ "$TEST_RC" != "0" ]; then echo "測試未通過（rc=$TEST_RC），不發布"; tail -40 out/test_output.txt; exit 1; fi
       - name: publish
         run: |
           # 標籤由 jobs/build.txt 的 tag= 指定；已存在就停止（不覆蓋、不刪除舊版，例如 data-20261105 須保留供對照）
