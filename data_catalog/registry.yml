@@ -24,6 +24,10 @@ groups:
     title: 財報｜綜合損益表、資產負債表（FinMind 現行值）
     tags:
       - {tag: fin-20261107, status: 未送驗收, note: FinMind 現行（最終修訂）值，非公告當時版本}
+  tdcc:
+    title: 集保戶股權分散週表（Goodinfo，053 股票池 98 檔）
+    tags:
+      - {tag: data-tdcc-20261111, status: 未送驗收, note: 2015-05～2026-11；兩份原檔合併，重疊 188 列無衝突；比例多數僅小數一位}
 raw:
   # 原始檔倉庫：建置用，不供回測直接讀取
   - {tag: raw-phase2, note: 第二期 12 個官方來源原始檔（每日更新當月／當年檔）}

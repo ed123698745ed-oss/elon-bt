@@ -111,3 +111,10 @@ financials:
   key: stock_id + date + dataset + type
   timing: date 為財報期末，不是公告日；可得時點須依法定申報期限另行推算
   caveats: FinMind 現行（最終修訂）值，非公告當時版本；重編影響須在個案揭露；長表格式（type＝科目、value＝數值）
+tdcc_dist:
+  group: tdcc
+  title: 集保戶股權分散週表（8 級人數與比例）
+  use: 千張／400 張大戶持股比例與人數變化（data_layer.tdcc_dist.big_ratio／big_holders）
+  key: date + stock_id
+  timing: 資料日期（週五為主）之後公布；保守以資料日期 + 7 日後首個交易日開盤為可用時點，由策略卡另定
+  caveats: 來源 Goodinfo 非官方原檔；比例多數僅小數一位（約 ±0.05 個百分點）；目前只收 053 股票池 98 檔；2015-04 前集保為月公布，本表不收；春節等無資料週不產生列
