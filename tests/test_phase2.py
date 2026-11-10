@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from data_layer.phase2_tools import DOWNTICK_35_PERIODS, ban_rule, detail_period, disposal_intervals, sec_kind, sec_kind_series
+from data_layer.phase2_tools import DOWNTICK_35_PERIODS, FULL_BAN_PERIODS, ban_rule, detail_period, disposal_intervals, sec_kind, sec_kind_series
 
 OUT = os.environ.get("P2_OUT", "/home/claude/raw_p2/out")
 CALP = os.environ.get("CAL", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "jobs", "trading_days.txt"))
@@ -110,7 +110,10 @@ def test_downtick_ban_rule_periods():
     d = pd.read_parquet(os.path.join(OUT, "downtick_list.parquet"), columns=["date", "ban_rule"])
     u = d.drop_duplicates("date")
     in35 = u["date"].map(lambda x: any(a <= x <= b for a, b in DOWNTICK_35_PERIODS))
-    assert (u.loc[in35, "ban_rule"] == "跌幅達3.5%").all() and (u.loc[~in35, "ban_rule"] == "跌停").all()
+    full = u["date"].map(lambda x: any(a <= x <= b for a, b in FULL_BAN_PERIODS))
+    assert (u.loc[in35, "ban_rule"] == "跌幅達3.5%").all() and (u.loc[full, "ban_rule"] == "全面禁止").all()
+    assert (u.loc[~in35 & ~full, "ban_rule"] == "跌停").all()
+    assert full.sum() == 20 and ban_rule("2015-08-21") == "跌停" and ban_rule("2015-09-21") == "跌停"
     assert in35.sum() == 135                                      # 櫃買標題改字 134 日＋2023-02-23（措施當日仍有效）
     assert ban_rule("2020-03-19") == "跌停" and ban_rule("2020-03-20") == "跌幅達3.5%" and ban_rule("2020-06-10") == "跌停"
     assert ban_rule("2022-10-24") == "跌幅達3.5%" and ban_rule("2023-02-23") == "跌幅達3.5%" and ban_rule("2023-02-24") == "跌停"
@@ -194,3 +197,13 @@ def test_disposal_table_vs_detail_conflicts_flagged():
     iv = disposal_intervals(sv)
     g = iv[(iv["code"] == "2410") & (iv["start"] <= "2007-08-03") & (iv["end"] >= "2007-07-27")]
     assert (g["end"] >= pd.Timestamp("2007-08-03")).any()
+
+
+
+@need
+def test_full_ban_days_all_starred():
+    """2015-08-24～09-18 全面禁止平盤下放空：名單上每檔都應加註（否則 ban_rule 解讀錯誤）。"""
+    d = pd.read_parquet(os.path.join(OUT, "downtick_list.parquet"), columns=["date", "downtick_ban_prev_limit", "ban_rule", "sec_kind"])
+    f = d[d["ban_rule"] == "全面禁止"]
+    assert len(f) > 0 and f.loc[f["sec_kind"] != "ETF", "downtick_ban_prev_limit"].all()   # 措施對象為股票與 TDR
+    assert not f.loc[f["sec_kind"] == "ETF", "downtick_ban_prev_limit"].any()             # ETF 不在禁止範圍

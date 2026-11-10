@@ -235,7 +235,8 @@ def _mark_rows(src):
 
 def downtick_list():
     """平盤下得融（借）券賣出名單：在名單內＝當日該證券受平盤下限制（看 short_susp／sbl_susp／downtick_ban_prev_limit 三個 * 欄）。
-    downtick_ban_prev_limit 的意義隨期間改變，以 ban_rule 標明：「跌停」＝前一交易日收盤跌停；「跌幅達3.5%」＝前一交易日收盤跌幅達 3.5% 以上。"""
+    downtick_ban_prev_limit 的意義隨期間改變，以 ban_rule 標明：「跌停」＝前一交易日收盤跌停；「跌幅達3.5%」＝前一交易日收盤跌幅達 3.5% 以上；
+    「全面禁止」＝2015-08-24～09-18 全面禁止平盤下放空（所有證券都加註）。各期語意以 experiments/validate_ban_rule.py 逐日對照前日行情驗證。"""
     out = []
     for src, market in (("twse_mark", "上市"), ("tpex_mark", "上櫃")):
         for d, rows, header in _mark_rows(src):

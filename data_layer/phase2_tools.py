@@ -14,12 +14,18 @@ import pandas as pd
 DOWNTICK_35_PERIODS = [(pd.Timestamp("2020-03-20"), pd.Timestamp("2020-06-09")),
                        (pd.Timestamp("2022-10-24"), pd.Timestamp("2023-02-23"))]
 HEADER_LAG_DAYS = {pd.Timestamp("2023-02-23")}   # 櫃買標題與規則期間不一致、已逐筆核實的日期
+# 全面禁止平盤以下融（借）券賣出期間（名單日期，含頭尾）：金管會 2015-08-23 宣布 8-24 起實施、9-21 起取消；
+# 名單當期股票與 TDR 的「前日」欄全部加註（ETF 不加註），星號不代表前日跌停。證券商、期貨商避險不在此限。
+FULL_BAN_PERIODS = [(pd.Timestamp("2015-08-24"), pd.Timestamp("2015-09-18"))]
+RULE_FULL_BAN = "全面禁止"
 RULE_LIMITDOWN = "跌停"
 RULE_DROP35 = "跌幅達3.5%"
 
 
 def ban_rule(date) -> str:
     d = pd.Timestamp(date)
+    if any(a <= d <= b for a, b in FULL_BAN_PERIODS):
+        return RULE_FULL_BAN
     return RULE_DROP35 if any(a <= d <= b for a, b in DOWNTICK_35_PERIODS) else RULE_LIMITDOWN
 
 
