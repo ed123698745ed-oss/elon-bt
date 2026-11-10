@@ -42,18 +42,50 @@ def write_report(path, title, case_id, version, revision, body, extra_lines=()):
 
 
 def check_report(path):
-    """自檢：首頁第一段必須有資料層標籤行，且與附檔 data_tags.json 一致；用了未驗收資料必須有警示行。"""
+    """自檢：首頁標籤行必須與附檔 data_tags.json 逐字一致（標籤、驗收狀態、表名都比對），
+    附檔中的驗收狀態須與登記簿現況一致，用了未驗收資料必須有警示行。"""
     text = open(path, encoding="utf-8").read()
     head = text.split("\n## ")[0]
     side = _json.load(open(path + ".data_tags.json", encoding="utf-8"))
     errs = []
-    if TAG_LINE not in head:
-        errs.append("首頁缺資料層標籤行")
-    for tag in side["data_tags"]:
-        if tag not in head:
-            errs.append(f"首頁缺標籤 {tag}")
-    if side["has_unaccepted"] and WARN_LINE not in head:
+    lines = [l for l in head.splitlines() if l.startswith(TAG_LINE)]
+    expect = TAG_LINE + _data.format_tags(side["data_tags"])
+    if len(lines) != 1:
+        errs.append(f"首頁資料層標籤行應恰有 1 行，實有 {len(lines)} 行")
+    elif lines[0] != expect:
+        got = _parse_tag_line(lines[0])
+        for tag, u in side["data_tags"].items():
+            g = got.get(tag)
+            if g is None:
+                errs.append(f"首頁缺標籤 {tag}")
+                continue
+            if g["status"] != u["status"]:
+                errs.append(f"{tag} 驗收狀態不符：首頁「{g['status']}」、附檔「{u['status']}」")
+            if g["tables"] != sorted(u["tables"]):
+                errs.append(f"{tag} 表名不符：首頁 {g['tables']}、附檔 {sorted(u['tables'])}")
+        for tag in set(got) - set(side["data_tags"]):
+            errs.append(f"首頁多出附檔沒有的標籤 {tag}")
+        if not errs:
+            errs.append("首頁標籤行與附檔格式不一致")
+    reg = {t["tag"]: t["status"] for v in _data._reg()["groups"].values() for t in v["tags"]}
+    for tag, u in side["data_tags"].items():
+        if reg.get(tag) != u["status"]:
+            errs.append(f"{tag} 附檔狀態「{u['status']}」與登記簿「{reg.get(tag)}」不符")
+    unacc = any(u["status"] != "已驗收" for u in side["data_tags"].values())
+    if bool(side.get("has_unaccepted")) != unacc:
+        errs.append("附檔 has_unaccepted 與各標籤狀態不一致")
+    if unacc and WARN_LINE not in head:
         errs.append("用了未驗收資料但首頁沒有警示")
-    if not side["has_unaccepted"] and WARN_LINE in head:
+    if not unacc and WARN_LINE in head:
         errs.append("全為已驗收資料卻有警示")
     return errs
+
+
+def _parse_tag_line(line):
+    import re
+    out = {}
+    for part in line[len(TAG_LINE):].split("；"):
+        m = re.match(r"(?P<tag>[^（]+)（(?P<st>[^）]+)）(?:【[^】]*】)?：(?P<tb>.*)", part)
+        if m:
+            out[m["tag"]] = {"status": m["st"], "tables": sorted(x for x in m["tb"].split("、") if x)}
+    return out

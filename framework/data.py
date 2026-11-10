@@ -112,15 +112,20 @@ def has_unaccepted() -> bool:
     return any(u["status"] != "已驗收" for u in _USED.values())
 
 
-def data_tags_used() -> str:
-    """報告第一頁用：列出本次用到的標籤、驗收狀態與表；有未驗收者明確標示。"""
-    if not _USED:
+def format_tags(used_map) -> str:
+    """把載入紀錄 {tag: {status, tables}} 排成報告用的一行；報告首頁與自檢共用同一格式。"""
+    if not used_map:
         return "（尚未載入任何共用資料）"
     out = []
-    for tag, u in _USED.items():
+    for tag, u in used_map.items():
         mark = "" if u["status"] == "已驗收" else f"【未驗收：{u['status']}，結果不得作正式結論】"
         out.append(f"{tag}（{u['status']}）{mark}：{'、'.join(sorted(u['tables']))}")
     return "；".join(out)
+
+
+def data_tags_used() -> str:
+    """報告第一頁用：列出本次用到的標籤、驗收狀態與表；有未驗收者明確標示。"""
+    return format_tags(used())
 
 
 def catalog() -> pd.DataFrame:
