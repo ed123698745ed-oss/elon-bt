@@ -11,7 +11,9 @@ groups:
       - {tag: data-20261105r68, status: 已驗收, note: Eve 複審通過（2026-11-06）, tests: "建置時 1 項因環境缺檔未過，重測 47 過（test_output_retest.txt）"}
       - {tag: data-20261107r69, status: 已退回, note: Eve 2026-11-10 退回：低價股漲跌停取整後等於基準價（99 列）}
       - {tag: data-20261110r70, status: 已被取代, note: 建置時測試在收集階段中斷（缺 pyyaml），由 r70b 取代}
-      - {tag: data-20261110r70b, status: 待複審, note: 補正 Eve 退回 r69：漲跌停取整後不足一升降單位以一單位計}
+      - {tag: data-20261110r70b, status: 已被取代, note: 補正 Eve 退回 r69（低價股漲跌停）；未送審，由 r72 取代}
+      - {tag: data-20261110r71, status: 已被取代, note: 自查補正版，但零價列標記索引錯位；未送審，由 r72 取代}
+      - {tag: data-20261110r72, status: 待複審, note: 補正 Eve 退回 r69（低價股漲跌停）＋自查：開高低為0改空值、盤中價超出推算漲跌停改待查（共 761 列）}
   phase2:
     title: 第二期｜指數、處置注意、融資融券註記、平盤下名單、變更交易
     tags:
