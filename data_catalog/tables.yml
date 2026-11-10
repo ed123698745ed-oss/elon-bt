@@ -75,7 +75,7 @@ surveillance:
   use: 處置期間、注意股事件
   key: market + kind + announce + code + start + reason
   timing: 公布日收盤後可得，最早次一交易日使用
-  caveats: 先用 sec_kind 篩證券類型；處置區間重疊請用 phase2_tools.disposal_intervals 合併；period_flag 標取消／恢復、起訖同日、期間逾 60 日；parse_note 標休市日等待核項目
+  caveats: 先用 sec_kind 篩證券類型；處置區間重疊請用 phase2_tools.disposal_intervals 合併；period_flag 標取消／恢復、起訖同日、期間逾 60 日、表格與內文日期不符（合併區間預設取聯集）；parse_note 標休市日等待核項目
 margin_flags:
   group: phase2
   title: 融資融券註記（停資、停券、停止買賣）
@@ -89,7 +89,7 @@ downtick_list:
   use: 當日能否平盤下放空
   key: date + market + code
   timing: 當日開盤前已知
-  caveats: 2013-09 起；downtick_ban_prev_limit 的意義看 ban_rule（跌停／跌幅達3.5%）；不在名單者不可平盤下放空；缺口日見 downtick_coverage
+  caveats: 2013-09 起；downtick_ban_prev_limit 的意義看 ban_rule（跌停／跌幅達3.5%／全面禁止，全面禁止期間 ETF 除外）；不在名單者不可平盤下放空；缺口日見 downtick_coverage
 downtick_coverage:
   group: phase2
   title: 平盤下名單逐日覆蓋狀態

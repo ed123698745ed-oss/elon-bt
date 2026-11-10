@@ -47,15 +47,15 @@ def resolve(table, allow_candidate=False, tag=None):
         hit = [x for x in tags if x["tag"] == tag]
         if not hit:
             raise KeyError(f"{tag} 不在 {t['group']} 組")
-        if hit[0]["status"] == "已被取代":
-            raise DataNotAccepted(f"{tag} 已被取代，不得使用")
+        if hit[0]["status"] in ("已被取代", "已退回"):
+            raise DataNotAccepted(f"{tag} {hit[0]['status']}，不得使用")
         if hit[0]["status"] != "已驗收" and not allow_candidate:
             raise DataNotAccepted(f"{tag} 狀態為「{hit[0]['status']}」，要用須 allow_candidate=True")
         return tag, hit[0]["status"]
     acc = [x for x in tags if x["status"] == "已驗收"]
     if acc and not allow_candidate:
         return acc[-1]["tag"], "已驗收"
-    cand = [x for x in tags if x["status"] not in ("已被取代",)]
+    cand = [x for x in tags if x["status"] not in ("已被取代", "已退回")]
     if allow_candidate and cand:
         return cand[-1]["tag"], cand[-1]["status"]
     raise DataNotAccepted(f"{table}（{t['group']} 組）目前沒有已驗收標籤；最新為 "

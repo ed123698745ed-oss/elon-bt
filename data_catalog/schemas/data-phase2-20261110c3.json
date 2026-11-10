@@ -1,0 +1,400 @@
+{
+ "tag": "data-phase2-20261110c3",
+ "manifest": "manifest.json",
+ "code_commit": "e5d5c18c5441fb09f8a4efa1d106a490d9b337cd",
+ "tests_exit_code": 0,
+ "source_asof": {
+  "tpex_attention": [
+   "2026-11-09",
+   "open_periods=202611"
+  ],
+  "tpex_disposal": [
+   "2026-11-09",
+   "open_periods=2026"
+  ],
+  "tpex_ix": [
+   "2026-11-09",
+   "open_periods=202611"
+  ],
+  "tpex_margin": [
+   "2026-11-09",
+   "open_periods="
+  ],
+  "tpex_mark": [
+   "2026-11-09",
+   "open_periods="
+  ],
+  "twse_fulldelivery": [
+   "2026-11-09",
+   "open_periods="
+  ],
+  "twse_ix": [
+   "2026-11-09",
+   "open_periods=202611"
+  ],
+  "twse_margin": [
+   "2026-11-09",
+   "open_periods="
+  ],
+  "twse_mark": [
+   "2026-11-09",
+   "open_periods="
+  ],
+  "twse_notice": [
+   "2026-11-09",
+   "open_periods=202611"
+  ],
+  "twse_punish": [
+   "2026-11-09",
+   "open_periods=2026"
+  ],
+  "twse_tri": [
+   "2026-11-09",
+   "open_periods=202611"
+  ]
+ },
+ "tables": {
+  "downtick_coverage": {
+   "rows": 6403,
+   "size": 43642,
+   "columns": [
+    {
+     "name": "date",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "market",
+     "type": "large_string"
+    },
+    {
+     "name": "rows",
+     "type": "int64"
+    },
+    {
+     "name": "status",
+     "type": "large_string"
+    }
+   ],
+   "ranges": {
+    "date": [
+     "2013-09-18",
+     "2026-11-03"
+    ]
+   },
+   "sha256": "295b9b4594c620296fb4e056d076e12791d18bb8da4e0ffb896f7f9467ef9698"
+  },
+  "downtick_list": {
+   "rows": 5106024,
+   "size": 3783291,
+   "columns": [
+    {
+     "name": "date",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "market",
+     "type": "large_string"
+    },
+    {
+     "name": "code",
+     "type": "large_string"
+    },
+    {
+     "name": "short_susp",
+     "type": "bool"
+    },
+    {
+     "name": "sbl_susp",
+     "type": "bool"
+    },
+    {
+     "name": "downtick_ban_prev_limit",
+     "type": "bool"
+    },
+    {
+     "name": "ban_rule",
+     "type": "large_string"
+    },
+    {
+     "name": "sec_kind",
+     "type": "large_string"
+    }
+   ],
+   "ranges": {
+    "date": [
+     "2013-09-18",
+     "2026-11-03"
+    ]
+   },
+   "sha256": "b26b705a7efa60fb3ca92cb79dac19ef7de4292e6bd7b1a49aadd48fa6b3e37b"
+  },
+  "fulldelivery": {
+   "rows": 107618,
+   "size": 109448,
+   "columns": [
+    {
+     "name": "date",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "market",
+     "type": "large_string"
+    },
+    {
+     "name": "code",
+     "type": "large_string"
+    },
+    {
+     "name": "name",
+     "type": "large_string"
+    },
+    {
+     "name": "period_auction",
+     "type": "bool"
+    },
+    {
+     "name": "sec_kind",
+     "type": "large_string"
+    }
+   ],
+   "ranges": {
+    "date": [
+     "2004-12-24",
+     "2026-11-03"
+    ]
+   },
+   "sha256": "fde802c55f5e93aa4b4ae622611433870ba77236603ef08481bed3561f33ff74"
+  },
+  "index_daily": {
+   "rows": 6898,
+   "size": 430800,
+   "columns": [
+    {
+     "name": "date",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "taiex_open",
+     "type": "double"
+    },
+    {
+     "name": "taiex_high",
+     "type": "double"
+    },
+    {
+     "name": "taiex_low",
+     "type": "double"
+    },
+    {
+     "name": "taiex_close",
+     "type": "double"
+    },
+    {
+     "name": "taiex_tri_close",
+     "type": "double"
+    },
+    {
+     "name": "tpex_open",
+     "type": "double"
+    },
+    {
+     "name": "tpex_high",
+     "type": "double"
+    },
+    {
+     "name": "tpex_low",
+     "type": "double"
+    },
+    {
+     "name": "tpex_close",
+     "type": "double"
+    }
+   ],
+   "ranges": {
+    "date": [
+     "1999-01-05",
+     "2026-11-09"
+    ]
+   },
+   "sha256": "15871dac6576cfa9913e6c210ed71c6b1e46ac50733adffcee24f016d944f1bd"
+  },
+  "margin_flags": {
+   "rows": 8503993,
+   "size": 8383524,
+   "columns": [
+    {
+     "name": "data_date",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "effective",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "market",
+     "type": "large_string"
+    },
+    {
+     "name": "code",
+     "type": "large_string"
+    },
+    {
+     "name": "stop_fin",
+     "type": "bool"
+    },
+    {
+     "name": "stop_short",
+     "type": "bool"
+    },
+    {
+     "name": "stop_trade",
+     "type": "bool"
+    },
+    {
+     "name": "short_alloc",
+     "type": "bool"
+    },
+    {
+     "name": "fin_alloc",
+     "type": "bool"
+    },
+    {
+     "name": "note_raw",
+     "type": "large_string"
+    },
+    {
+     "name": "unknown_codes",
+     "type": "large_string"
+    },
+    {
+     "name": "parse_note",
+     "type": "large_string"
+    },
+    {
+     "name": "sec_kind",
+     "type": "large_string"
+    }
+   ],
+   "ranges": {
+    "data_date": [
+     "2001-01-02",
+     "2026-11-03"
+    ],
+    "effective": [
+     "2001-01-03",
+     "2026-11-03"
+    ]
+   },
+   "sha256": "3142898486531ccf8b9b351a77a665ffa76701816d1b9e685abcf2da8cf294c9"
+  },
+  "surveillance": {
+   "rows": 114476,
+   "size": 7153224,
+   "columns": [
+    {
+     "name": "market",
+     "type": "large_string"
+    },
+    {
+     "name": "kind",
+     "type": "large_string"
+    },
+    {
+     "name": "announce",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "code",
+     "type": "large_string"
+    },
+    {
+     "name": "name",
+     "type": "large_string"
+    },
+    {
+     "name": "count",
+     "type": "int64"
+    },
+    {
+     "name": "reason",
+     "type": "large_string"
+    },
+    {
+     "name": "start",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "end",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "measure",
+     "type": "large_string"
+    },
+    {
+     "name": "match_min",
+     "type": "double"
+    },
+    {
+     "name": "prepay",
+     "type": "large_string"
+    },
+    {
+     "name": "detail",
+     "type": "large_string"
+    },
+    {
+     "name": "parse_note",
+     "type": "large_string"
+    },
+    {
+     "name": "sec_kind",
+     "type": "large_string"
+    },
+    {
+     "name": "period_days",
+     "type": "double"
+    },
+    {
+     "name": "detail_start",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "detail_end",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "period_flag",
+     "type": "large_string"
+    },
+    {
+     "name": "overlap_prev",
+     "type": "bool"
+    }
+   ],
+   "ranges": {
+    "announce": [
+     "2001-01-02",
+     "2026-11-09"
+    ],
+    "start": [
+     "2001-01-03",
+     "2026-11-10"
+    ],
+    "end": [
+     "2001-01-09",
+     "2026-11-16"
+    ],
+    "detail_start": [
+     "2003-09-05",
+     "2026-11-10"
+    ],
+    "detail_end": [
+     "2003-09-12",
+     "2026-11-16"
+    ]
+   },
+   "sha256": "3e3fc28cba1cb2607faba8db2c359cf22c78227a8aa056ee5e7e77cfbb28e54e"
+  }
+ }
+}

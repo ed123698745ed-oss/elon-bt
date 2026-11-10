@@ -12,7 +12,7 @@ sys.path.insert(0, ROOT)
 from data_catalog import remote  # noqa: E402
 
 CAT = os.path.join(ROOT, "data_catalog")
-STATUS_ICON = {"已驗收": "✅", "待驗收": "🟡", "待複審": "🟡", "未送驗收": "⚪", "已被取代": "⛔"}
+STATUS_ICON = {"已驗收": "✅", "待驗收": "🟡", "待複審": "🟡", "未送驗收": "⚪", "已退回": "↩️", "已被取代": "⛔"}
 
 
 def load_yaml(n):
@@ -42,7 +42,7 @@ def current_tags(reg):
     for g, v in reg["groups"].items():
         tags = v["tags"]
         acc = [t for t in tags if t["status"] == "已驗收"]
-        cand = [t for t in tags if t["status"] not in ("已驗收", "已被取代")]
+        cand = [t for t in tags if t["status"] not in ("已驗收", "已被取代", "已退回")]
         out[g] = (acc[-1] if acc else None, cand[-1] if cand else None)
     return out
 
@@ -58,11 +58,11 @@ def period(info):
 def main():
     reg, tbl = load_yaml("registry.yml"), load_yaml("tables.yml")
     cur = current_tags(reg)
-    snaps = {t["tag"]: snapshot(t["tag"]) for v in reg["groups"].values() for t in v["tags"] if t["status"] != "已被取代"}
+    snaps = {t["tag"]: snapshot(t["tag"]) for v in reg["groups"].values() for t in v["tags"] if t["status"] not in ("已被取代",)}
     L = ["# 共用資料清單（自動產生，勿手改）", "",
          "由 `tools/gen_catalog.py` 依 `data_catalog/registry.yml`（標籤與驗收狀態）、`data_catalog/tables.yml`（表說明）與 Release 上的 parquet 檔產生。", "",
          "**取資料一律用** `from framework.data import load` → `load(\"表名\")`：預設只給已驗收標籤；要用未驗收版本須寫 `allow_candidate=True`，報告第一頁的資料標籤以 `data_tags_used()` 填寫。", "",
-         "圖例：✅ 已驗收　🟡 待驗收／待複審　⚪ 未送驗收　⛔ 已被取代", "",
+         "圖例：✅ 已驗收　🟡 待驗收／待複審　⚪ 未送驗收　↩️ 已退回　⛔ 已被取代", "",
          "## 一、各組目前可用標籤", "",
          "| 組 | 內容 | 預設（已驗收） | 最新未驗收版本 |", "|---|---|---|---|"]
     for g, v in reg["groups"].items():

@@ -1,5 +1,5 @@
 # 資料標籤登記簿（Elon 維護）。驗收狀態只依 Eve 的驗收／複審結果填寫，不得自行標「已驗收」。
-# status：已驗收｜待驗收｜待複審｜未送驗收｜已被取代
+# status：已驗收｜待驗收｜待複審｜未送驗收｜已退回｜已被取代
 # 同一組內，load() 預設取「最後一個已驗收」標籤（依本檔順序）。
 groups:
   phase1:
@@ -9,12 +9,15 @@ groups:
       - {tag: data-20261105r67, status: 已被取代, note: 由 r68 取代}
       - {tag: data-20261105r67b, status: 已被取代, note: 由 r68 取代}
       - {tag: data-20261105r68, status: 已驗收, note: Eve 複審通過（2026-11-06）, tests: "建置時 1 項因環境缺檔未過，重測 47 過（test_output_retest.txt）"}
-      - {tag: data-20261107r69, status: 待複審, note: 退回-69（外部審查）修正版：漲跌停價依日期升降單位、官方基準價鏈等；複審通過前不得正式使用}
+      - {tag: data-20261107r69, status: 已退回, note: Eve 2026-11-10 退回：低價股漲跌停取整後等於基準價（99 列）}
+      - {tag: data-20261110r70, status: 已被取代, note: 建置時測試在收集階段中斷（缺 pyyaml），由 r70b 取代}
+      - {tag: data-20261110r70b, status: 待複審, note: 補正 Eve 退回 r69：漲跌停取整後不足一升降單位以一單位計}
   phase2:
     title: 第二期｜指數、處置注意、融資融券註記、平盤下名單、變更交易
     tags:
       - {tag: data-phase2-20261107c1, status: 已被取代, note: 未送審；外部審查後由 c2 取代}
-      - {tag: data-phase2-20261107c2, status: 待驗收, note: 外部審查修正版（ban_rule、downtick_coverage、sec_kind、處置期間旗標）}
+      - {tag: data-phase2-20261107c2, status: 已退回, note: Eve 2026-11-10 退回：2023-02-23 ban_rule 錯標、處置表格與內文日期衝突未標}
+      - {tag: data-phase2-20261110c3, status: 待驗收, note: 補正 Eve 退回 c2：3.5% 期間延至 2023-02-23、新增 2015 全面禁止期間、處置內文日期比對}
   fin:
     title: 財報｜綜合損益表、資產負債表（FinMind 現行值）
     tags:

@@ -9,7 +9,7 @@ sys.path.insert(0, ROOT)
 from framework import data  # noqa: E402
 
 CAT = os.path.join(ROOT, "data_catalog")
-STATUSES = {"已驗收", "待驗收", "待複審", "未送驗收", "已被取代"}
+STATUSES = {"已驗收", "待驗收", "待複審", "未送驗收", "已退回", "已被取代"}
 
 
 def _y(n):
@@ -24,7 +24,7 @@ def test_registry_statuses_and_tables_documented():
             assert t["status"] in STATUSES, t
             assert t["tag"] not in seen
             seen.add(t["tag"])
-            if t["status"] == "已被取代":
+            if t["status"] in ("已被取代", "已退回"):
                 continue
             snap = os.path.join(CAT, "schemas", f"{t['tag']}.json")
             assert os.path.exists(snap), f"缺快取 {snap}（執行 tools/gen_catalog.py）"
@@ -59,7 +59,7 @@ def test_resolve_defaults_to_accepted_and_blocks_others():
             tag, st = data.resolve(table, allow_candidate=True)
             assert st != "已驗收"
         for t in v["tags"]:
-            if t["status"] == "已被取代":
+            if t["status"] in ("已被取代", "已退回"):
                 with pytest.raises(data.DataNotAccepted):
                     data.resolve(table, allow_candidate=True, tag=t["tag"])
             elif t["status"] != "已驗收":
