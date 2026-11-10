@@ -146,3 +146,23 @@ def test_r70_judge_fill_insufficient_for_new_pending_sources():
         bar = {"open": 10, "high": 10, "low": 10, "close": 10, "volume": 1000, "limit_up": 11, "limit_down": 9, "limit_src": src}
         f = judge_fill(bar, "long", "entry", "open")
         assert f.insufficient and not f.ok
+
+
+
+def test_r70_judge_fill_nan_price_insufficient():
+    from framework.market import judge_fill
+    bar = {"open": float("nan"), "high": float("nan"), "low": float("nan"), "close": 10, "volume": 50,
+           "limit_up": None, "limit_down": None, "limit_src": "無漲跌幅（初次掛牌前五日）"}
+    f = judge_fill(bar, "long", "entry", "open")
+    assert f.insufficient and not f.ok
+
+
+
+@need_out
+def test_r70_zero_rows_marked_where_assigned():
+    """開高低為 0 的列（price_note 有值）不得仍是可判定的限價來源；「待查（開高低為0）」只能出現在這些列（防索引錯位）。"""
+    d = pd.read_parquet(os.path.join(OUT, "daily_k.parquet"), columns=["limit_src", "price_note", "no_limit_status"])
+    z = d["price_note"].notna()
+    ok = d.loc[z, "limit_src"].str.startswith("待查") | (d.loc[z, "limit_src"] == "缺參考價") | d.loc[z, "limit_src"].str.startswith("無漲跌幅")
+    assert ok.all()
+    assert (d.loc[d["limit_src"] == "待查（開高低為0）", "price_note"].notna()).all()

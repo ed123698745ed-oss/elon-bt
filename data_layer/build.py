@@ -392,11 +392,13 @@ def build_daily(px: pd.DataFrame, ex: pd.DataFrame, ca: pd.DataFrame | None = No
         LOG["daily_k"]["jump_long_gap_rows"] = int(long_gap.sum())
     # 退回-70（自查）：收盤在漲跌停內、但盤中高／低超出推算漲跌停 → 推算值不可靠（多為缺公司行動或官方參考價的除權息日、
     # 櫃買官方表過期日），限價來源改「待查」，成交判定一律資料不足；收盤也超出者已由跳動旗標處理
+    nolim = px["no_limit_status"].notna() | px["limit_src"].str.startswith("無漲跌幅")   # 合併後索引已重排，重算
     intraday_out = ~px["no_trade"] & ~nolim & ~px["jump_flag"] & px["limit_up"].notna() & \
         ~px["limit_src"].str.startswith("待查") & (px["limit_src"] != "缺參考價") & \
         ((px["high"] > px["limit_up"] + tol) | (px["low"] < px["limit_down"] - tol))
     px.loc[intraday_out, "limit_src"] = "待查（盤中價超出推算漲跌停）"
-    px.loc[zero & ~nolim, "limit_src"] = "待查（開高低為0）"
+    zero_now = px["price_note"].notna() & ~nolim & ~px["limit_src"].str.startswith("待查") & (px["limit_src"] != "缺參考價")
+    px.loc[zero_now, "limit_src"] = "待查（開高低為0）"
     LOG["daily_k"]["intraday_out_rows"] = int(intraday_out.sum())
     LOG["daily_k"].update(rows=len(px), official_limit_rows=int((px["limit_src"] == "官方除權息表").sum()),
                           limit_src=px["limit_src"].value_counts().to_dict(), jump_rows=int(px["jump_flag"].sum()))

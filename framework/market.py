@@ -74,6 +74,8 @@ def judge_fill(bar, direction: str, action: str, session: str, prev_close: float
         return Fill(False, None, "零量")
     buy = (direction == "long") == (action == "entry")
     px = bar["open"] if session == "open" else bar["close"]
+    if px is None or pd.isna(px):     # 退回-70：開高低為 0 已改空值，不得以空值成交
+        return Fill(False, None, f"資料不足：{'開盤' if session == 'open' else '收盤'}價缺值", "可成交性未驗證", insufficient=True)
     up, dn = bar.get("limit_up"), bar.get("limit_down")
     one = bar["open"] == bar["high"] == bar["low"] == bar["close"]
     if buy and up is not None and one and px == up:
