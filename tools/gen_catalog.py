@@ -104,6 +104,14 @@ def main():
         L += ["", "資料截至日（各來源最後完整檢查日；open_periods 為當時尚未結束、之後會更新的期間）：", ""]
         for t, a in asof.items():
             L.append(f"- {t}：" + "；".join(f"{k} {v[0]}{('（' + v[1] + '）') if len(v) > 1 and v[1] != 'open_periods=' else ''}" for k, v in a.items()))
+    known = {t["tag"] for v in reg["groups"].values() for t in v["tags"]} | {r["tag"] for r in reg["raw"]}
+    live = remote.release_tags()
+    L += ["", "## 五、未登記標籤（load() 不會使用，須先登記並送驗收）", ""]
+    if live is None:
+        L.append("（本次無法查詢 GitHub Release 清單）")
+    else:
+        extra = sorted(set(live) - known)
+        L += [f"- ⚠ `{t}`" for t in extra] or ["（無）"]
     open(os.path.join(ROOT, "CATALOG.md"), "w", encoding="utf-8").write("\n".join(L) + "\n")
     print("CATALOG.md", len(L), "lines")
 

@@ -216,3 +216,7 @@
 資料截至日（各來源最後完整檢查日；open_periods 為當時尚未結束、之後會更新的期間）：
 
 - data-phase2-20261107c2：tpex_attention 2026-11-07（open_periods=202611）；tpex_disposal 2026-11-07（open_periods=2026）；tpex_ix 2026-11-07（open_periods=202611）；tpex_margin 2026-11-07；tpex_mark 2026-11-07；twse_fulldelivery 2026-11-07；twse_ix 2026-11-07（open_periods=202611）；twse_margin 2026-11-07；twse_mark 2026-11-07；twse_notice 2026-11-07（open_periods=202611）；twse_punish 2026-11-07（open_periods=2026）；twse_tri 2026-11-07（open_periods=202611）
+
+## 五、未登記標籤（load() 不會使用，須先登記並送驗收）
+
+（無）

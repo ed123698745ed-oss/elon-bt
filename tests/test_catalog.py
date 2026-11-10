@@ -41,7 +41,9 @@ def test_catalog_md_is_current():
     import subprocess
     before = open(os.path.join(ROOT, "CATALOG.md"), encoding="utf-8").read()
     subprocess.run([sys.executable, os.path.join(ROOT, "tools", "gen_catalog.py")], check=True, capture_output=True)
-    assert open(os.path.join(ROOT, "CATALOG.md"), encoding="utf-8").read() == before, "CATALOG.md 與登記簿不一致，請重產"
+    after = open(os.path.join(ROOT, "CATALOG.md"), encoding="utf-8").read()
+    cut = lambda t: t.split("## 五、未登記標籤")[0]          # 第五節依 GitHub 即時查詢，離線時會不同
+    assert cut(after) == cut(before), "CATALOG.md 與登記簿不一致，請重產"
 
 
 def test_resolve_defaults_to_accepted_and_blocks_others():
@@ -87,6 +89,35 @@ def test_wrong_file_rejected(tmp_path, monkeypatch):
     monkeypatch.setenv("ELON_DATA_LOCAL_PHASE1", str(tmp_path))
     with pytest.raises(RuntimeError, match="sha256"):
         data.load("status")
+
+
+@pytest.mark.parametrize("bad", [None, "", "abc", "C65E57653FCDC922EBB4559C936ECF2464620C8E3BF7F38F0CBA191150249F21", "g" * 64])
+def test_missing_or_malformed_hash_rejected(bad, tmp_path, monkeypatch):
+    """清冊雜湊缺失／空值／格式錯誤時，path() 必須拒絕，即使本機檔存在。"""
+    f = tmp_path / "status.parquet"
+    f.write_bytes(b"x")
+    monkeypatch.setenv("ELON_DATA_LOCAL_PHASE1", str(tmp_path))
+    real = data._snapshot
+
+    def fake(tag):
+        s = real(tag)
+        s["tables"]["status"] = dict(s["tables"]["status"], sha256=bad)
+        if bad is None:
+            s["tables"]["status"].pop("sha256")
+        return s
+    monkeypatch.setattr(data, "_snapshot", fake)
+    data._USED.clear()
+    with pytest.raises(RuntimeError, match="缺失或格式錯誤"):
+        data.path("status")
+    assert data._USED == {}
+
+
+def test_all_registered_snapshots_have_valid_hashes():
+    import re
+    for f in os.listdir(os.path.join(CAT, "schemas")):
+        s = yaml.safe_load(open(os.path.join(CAT, "schemas", f), encoding="utf-8"))
+        for n, t in s["tables"].items():
+            assert re.fullmatch(r"[0-9a-f]{64}", t.get("sha256") or ""), (f, n)
 
 
 def test_candidate_is_marked(monkeypatch):

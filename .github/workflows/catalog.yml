@@ -2,10 +2,12 @@ name: catalog
 # 資料清單 CATALOG.md 自動更新：建置完成、或登記簿／表說明變更時重產；有差異才提交。
 on:
   workflow_run:
-    workflows: [build-data, build-phase2]
+    workflows: [build-data, build-phase2, fetch-financials, fetch-064-annual]
     types: [completed]
   push:
     paths: ["data_catalog/registry.yml", "data_catalog/tables.yml", "tools/gen_catalog.py", "data_catalog/remote.py"]
+  schedule:
+    - cron: "17 1 * * *"   # 每天一次兜底：任何流程新發布、未登記的標籤都會出現在清單第五節
   workflow_dispatch:
 permissions: { contents: write }
 concurrency: { group: catalog, cancel-in-progress: false }
@@ -20,6 +22,7 @@ jobs:
         with: { python-version: "3.11" }
       - run: pip install pandas pyarrow pyyaml pytest
       - run: python tools/gen_catalog.py
+        env: { GITHUB_TOKEN: "${{ github.token }}" }
       - run: python -m pytest -q tests/test_catalog.py
       - name: commit
         run: |

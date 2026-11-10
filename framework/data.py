@@ -8,10 +8,10 @@
 規則：
 - 標籤與驗收狀態以 data_catalog/registry.yml 為準（依 Eve 結果填寫）；預設取該組最後一個「已驗收」標籤。
 - 該組沒有已驗收標籤時 load() 拒絕，除非 allow_candidate=True；指定 tag= 時，已被取代的標籤一律拒絕。
-- 下載後核對 sha256（清冊值），不符即報錯；本機快取在 $ELON_DATA（預設 ~/.elon_data/<tag>/）。
+- 下載後核對 sha256（清冊值），清冊缺雜湊、格式錯誤或不符一律拒絕；本機快取在 $ELON_DATA（預設 ~/.elon_data/<tag>/）。
 - 已下載的本機資料夾可用 $ELON_DATA_LOCAL_<組>（例：ELON_DATA_LOCAL_PHASE1=/path/out_r68）指定，仍核對 sha256。
 """
-import hashlib, json, os, sys
+import hashlib, json, os, re, sys
 
 import pandas as pd
 import yaml
@@ -79,7 +79,9 @@ def _sha(p):
 
 def path(table, allow_candidate=False, tag=None):
     tag, status = resolve(table, allow_candidate, tag)
-    want = _snapshot(tag)["tables"][table]["sha256"]
+    want = _snapshot(tag)["tables"][table].get("sha256")
+    if not isinstance(want, str) or not re.fullmatch(r"[0-9a-f]{64}", want):
+        raise RuntimeError(f"{tag} 清冊中 {table} 的 sha256 缺失或格式錯誤（{want!r}），不載入")
     group = _tables()[table]["group"].upper()
     local = os.environ.get(f"ELON_DATA_LOCAL_{group}")
     p = os.path.join(local, f"{table}.parquet") if local else \
@@ -90,7 +92,7 @@ def path(table, allow_candidate=False, tag=None):
         os.makedirs(os.path.dirname(p), exist_ok=True)
         remote.download(tag, f"{table}.parquet", p + ".part")
         os.replace(p + ".part", p)
-    if want and _sha(p) != want:
+    if _sha(p) != want:
         raise RuntimeError(f"{p} 的 sha256 與 {tag} 清冊不符，不使用")
     u = _USED.setdefault(tag, {"status": status, "tables": set()})
     u["tables"].add(table)
@@ -99,6 +101,15 @@ def path(table, allow_candidate=False, tag=None):
 
 def load(table, allow_candidate=False, tag=None, columns=None, **kw) -> pd.DataFrame:
     return pd.read_parquet(path(table, allow_candidate, tag), columns=columns, **kw)
+
+
+def used() -> dict:
+    """本次載入紀錄（tag -> {status, tables}），供報告首頁與附檔使用。"""
+    return {t: {"status": u["status"], "tables": sorted(u["tables"])} for t, u in _USED.items()}
+
+
+def has_unaccepted() -> bool:
+    return any(u["status"] != "已驗收" for u in _USED.values())
 
 
 def data_tags_used() -> str:

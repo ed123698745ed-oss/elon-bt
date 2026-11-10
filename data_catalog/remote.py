@@ -1,5 +1,5 @@
 """讀 GitHub Release 上的檔案：清冊 JSON、parquet 檔尾（只抓結構與統計，不下載整檔）、整檔下載。"""
-import io, json, struct, urllib.request
+import io, json, os, struct, urllib.request
 
 REPO = "ed123698745ed-oss/elon-bt"
 UA = {"User-Agent": "elon-bt-catalog"}
@@ -93,3 +93,27 @@ def download(tag, name, dst):
             if not b:
                 break
             f.write(b)
+
+
+def release_tags():
+    """列出 repo 全部 Release 標籤（GitHub API；Actions 內用 GITHUB_TOKEN）。失敗回傳 None。"""
+    tags, page = [], 1
+    h = dict(UA, Accept="application/vnd.github+json")
+    tok = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    if tok:
+        h["Authorization"] = f"Bearer {tok}"
+    try:
+        while True:
+            b, _ = get_h(f"https://api.github.com/repos/{REPO}/releases?per_page=100&page={page}", h)
+            j = json.loads(b)
+            tags += [r["tag_name"] for r in j]
+            if len(j) < 100:
+                return tags
+            page += 1
+    except Exception:
+        return None
+
+
+def get_h(u, headers, timeout=60):
+    with urllib.request.urlopen(urllib.request.Request(u, headers=headers), timeout=timeout) as r:
+        return r.read(), r.headers

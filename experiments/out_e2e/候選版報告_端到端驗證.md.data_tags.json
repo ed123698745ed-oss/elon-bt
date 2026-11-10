@@ -1,0 +1,19 @@
+{
+ "report": "候選版報告_端到端驗證.md",
+ "data_tags": {
+  "data-20261105r68": {
+   "status": "已驗收",
+   "tables": [
+    "calendar",
+    "daily_k"
+   ]
+  },
+  "data-phase2-20261107c2": {
+   "status": "待驗收",
+   "tables": [
+    "surveillance"
+   ]
+  }
+ },
+ "has_unaccepted": true
+}
