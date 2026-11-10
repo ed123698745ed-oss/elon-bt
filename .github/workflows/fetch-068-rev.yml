@@ -1,0 +1,42 @@
+name: fetch-068-rev
+# 068 快篩月營收原始下載（FinMind TaiwanStockMonthRevenue，2011-01～2022-06，只到樣本內切點）。
+# D-068-20261111-0018-1（Ed 2026-11-11 00:18「照建議」）；非共用資料層、未驗收，列資料層待補清單。
+# 原始回傳與請求紀錄打包上傳 Release「raw-068-revenue」（prerelease）；可續傳。
+on:
+  push:
+    paths: ["experiments/068/fetch_rev.py", "experiments/068/ids068.txt", ".github/workflows/fetch-068-rev.yml"]
+  workflow_dispatch:
+concurrency: { group: fetch-068-rev, cancel-in-progress: false }
+permissions: { contents: write }
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      FINMIND_TOKEN_1: ${{ secrets.FINMIND_TOKEN_1 }}
+      FINMIND_TOKEN_2: ${{ secrets.FINMIND_TOKEN_2 }}
+      FINMIND_TOKEN_3: ${{ secrets.FINMIND_TOKEN_3 }}
+      FINMIND_TOKEN_4: ${{ secrets.FINMIND_TOKEN_4 }}
+      RAW_DIR: raw_rev
+      ALLOW_HOURS: "17-8"
+      BUDGET_MIN: "100"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: restore progress
+        run: |
+          gh release view raw-068-revenue >/dev/null 2>&1 || gh release create raw-068-revenue --title raw-068-revenue --notes "068 快篩月營收原始回傳（FinMind 現行值，未驗收，非共用資料層）；raw-068-revenue.tar.gz" --prerelease
+          gh release download raw-068-revenue -p raw-068-revenue.tar.gz || true
+          [ -f raw-068-revenue.tar.gz ] && tar xzf raw-068-revenue.tar.gz || mkdir -p raw_rev
+      - name: fetch
+        run: python experiments/068/fetch_rev.py
+      - name: save
+        if: always()
+        run: |
+          tar czf raw-068-revenue.tar.gz raw_rev
+          sha256sum raw-068-revenue.tar.gz | tee raw-068-revenue.sha256
+          files="raw-068-revenue.tar.gz raw-068-revenue.sha256"
+          for f in raw_rev/_attempts_finmind.csv raw_rev/_status_rev.json; do [ -s "$f" ] && files="$files $f"; done
+          gh release upload raw-068-revenue $files --clobber
