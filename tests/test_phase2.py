@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from data_layer.phase2_tools import DOWNTICK_35_PERIODS, ban_rule, disposal_intervals, sec_kind, sec_kind_series
+from data_layer.phase2_tools import DOWNTICK_35_PERIODS, ban_rule, detail_period, disposal_intervals, sec_kind, sec_kind_series
 
 OUT = os.environ.get("P2_OUT", "/home/claude/raw_p2/out")
 CALP = os.environ.get("CAL", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "jobs", "trading_days.txt"))
@@ -111,9 +111,9 @@ def test_downtick_ban_rule_periods():
     u = d.drop_duplicates("date")
     in35 = u["date"].map(lambda x: any(a <= x <= b for a, b in DOWNTICK_35_PERIODS))
     assert (u.loc[in35, "ban_rule"] == "跌幅達3.5%").all() and (u.loc[~in35, "ban_rule"] == "跌停").all()
-    assert in35.sum() == 134                                      # 官方櫃買標題改字的交易日數
+    assert in35.sum() == 135                                      # 櫃買標題改字 134 日＋2023-02-23（措施當日仍有效）
     assert ban_rule("2020-03-19") == "跌停" and ban_rule("2020-03-20") == "跌幅達3.5%" and ban_rule("2020-06-10") == "跌停"
-    assert ban_rule("2022-10-24") == "跌幅達3.5%" and ban_rule("2023-02-22") == "跌幅達3.5%" and ban_rule("2023-02-23") == "跌停"
+    assert ban_rule("2022-10-24") == "跌幅達3.5%" and ban_rule("2023-02-23") == "跌幅達3.5%" and ban_rule("2023-02-24") == "跌停"
 
 
 @need
@@ -170,3 +170,27 @@ def test_disposal_intervals_merges_overlap_and_drops_cancel():
     sv["period_days"] = (sv["end"] - sv["start"]).dt.days + 1
     iv = disposal_intervals(sv)
     assert iv.values.tolist() == [["上市", "2330", t("2024-01-02"), t("2024-01-25")], ["上市", "2330", t("2024-02-01"), t("2024-02-10")]]
+
+
+
+def test_detail_period_parsing():
+    t = pd.Timestamp
+    assert detail_period("自民國一百零九年三月二十七日起至一百零九年四月十三日﹝十個營業日") == (t("2020-03-27"), t("2020-04-13"))
+    assert detail_period("爰自96年7月30日起五個營業日（96年7月30日至8月3日，如遇休市則順延執行）") == (t("2007-07-30"), t("2007-08-03"))
+    assert detail_period("（１１４年１２月２９日至１月６日）") == (t("2025-12-29"), t("2026-01-06"))
+    assert detail_period("無日期") == (None, None)
+
+
+@need
+def test_disposal_table_vs_detail_conflicts_flagged():
+    """Eve 退回 c2：櫃買 2410 2007-07-27 表格 7/27～8/02、內文 7/30～8/03，必須標待核，合併區間預設取聯集。"""
+    sv = pd.read_parquet(os.path.join(OUT, "surveillance.parquet"))
+    p = sv[sv["kind"] == "處置"]
+    cf = p["detail_start"].notna() & ((p["detail_start"] != p["start"]) | (p["detail_end"] != p["end"]))
+    assert (p.loc[cf, "period_flag"].str.contains("表格與內文日期不符")).all()
+    assert not p.loc[~cf, "period_flag"].str.contains("表格與內文日期不符").any()
+    r = p[(p["code"] == "2410") & (p["announce"] == "2007-07-27")]
+    assert len(r) == 1 and "表格與內文日期不符" in r["period_flag"].iloc[0]
+    iv = disposal_intervals(sv)
+    g = iv[(iv["code"] == "2410") & (iv["start"] <= "2007-08-03") & (iv["end"] >= "2007-07-27")]
+    assert (g["end"] >= pd.Timestamp("2007-08-03")).any()

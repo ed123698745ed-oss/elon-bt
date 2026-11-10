@@ -8,9 +8,9 @@ import glob, json, os, re
 import pandas as pd
 
 try:
-    from data_layer.phase2_tools import ban_rule, sec_kind, sec_kind_series, RULE_DROP35
+    from data_layer.phase2_tools import ban_rule, sec_kind, sec_kind_series, RULE_DROP35, HEADER_LAG_DAYS, detail_period
 except ImportError:      # 直接以 python data_layer/build_phase2.py 執行
-    from phase2_tools import ban_rule, sec_kind, sec_kind_series, RULE_DROP35
+    from phase2_tools import ban_rule, sec_kind, sec_kind_series, RULE_DROP35, HEADER_LAG_DAYS, detail_period
 
 RAW = os.environ.get("RAW", "raw")
 OUT = os.environ.get("OUT", "out")
@@ -162,9 +162,15 @@ def surveillance():
     # 處置期間可靠性：只標記、不改值、不推估
     df["period_days"] = (df["end"] - df["start"]).dt.days + 1
     cancel = df["detail"].str.contains("取消|恢復", regex=True) & (df["kind"] == "處置")
+    dp = [detail_period(t) if k == "處置" else (None, None) for t, k in zip(df["detail"], df["kind"])]
+    df["detail_start"] = pd.to_datetime([a for a, _ in dp])
+    df["detail_end"] = pd.to_datetime([b for _, b in dp])
+    conflict = df["detail_start"].notna() & ((df["detail_start"] != df["start"]) | (df["detail_end"] != df["end"]))
     flags = []
-    for c, same, long_, in zip(cancel, df["end"] == df["start"], df["period_days"] > 60):
+    for c, same, long_, cf in zip(cancel, df["end"] == df["start"], df["period_days"] > 60, conflict):
         f = []
+        if cf:
+            f.append("表格與內文日期不符")
         if c:
             f.append("取消／恢復公告")
         if same:
@@ -234,7 +240,7 @@ def downtick_list():
     for src, market in (("twse_mark", "上市"), ("tpex_mark", "上櫃")):
         for d, rows, header in _mark_rows(src):
             rule = ban_rule(d)
-            if src == "tpex_mark" and (("3.5%" in header) != (rule == RULE_DROP35)):
+            if src == "tpex_mark" and (("3.5%" in header) != (rule == RULE_DROP35)) and d not in HEADER_LAG_DAYS:
                 raise RuntimeError(f"櫃買名單欄位標題與規則期間不符 {d.date()}: {header}")
             for r in rows:
                 f = [str(x).strip() == "*" for x in r[2:5]]
@@ -320,6 +326,9 @@ def main():
     print("downtick_list", len(dl), dl.groupby("market").date.agg(["min", "max", "nunique"]).to_string())
     print(dl[["short_susp", "sbl_susp", "downtick_ban_prev_limit"]].sum().to_string())
     sv.to_parquet(os.path.join(OUT, "surveillance.parquet"), index=False)
+    cf = sv["period_flag"].str.contains("表格與內文日期不符", regex=False)
+    print("內文日期可解析", int(sv.detail_start.notna().sum()), "不符", int(cf.sum()))
+    print(sv.loc[cf, ["market", "announce", "code", "start", "end", "detail_start", "detail_end"]].to_string())
     print("period_flag", sv.loc[sv.kind == "處置", "period_flag"].value_counts().to_string(), "overlap_prev", int(sv.overlap_prev.sum()))
     for nm, t in (("surveillance", sv), ("margin_flags", mf), ("downtick_list", dl), ("fulldelivery", fd)):
         if len(t):

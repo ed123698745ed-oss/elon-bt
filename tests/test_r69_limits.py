@@ -113,3 +113,15 @@ def test_daily_k_no_duplicate_keys():
     """外部審查「日K列數差 1」：舊標籤 data-20261105 有 1 列重複（3454 2011-07-27），r67 起已無；此後每版都要檢查。"""
     d = pd.read_parquet(os.path.join(OUT, "daily_k.parquet"), columns=["date", "stock_id"])
     assert not d.duplicated().any()
+
+
+
+def test_r70_low_price_limit_at_least_one_tick():
+    """Eve 退回 r69：1450 2005-06-16 基準 0.13，7% 取整後漲跌停都等於基準；應以一個升降單位計 → 0.14／0.12。"""
+    from framework.elon_tools import limit_prices
+    assert limit_prices(0.13, "2005-06-16") == (0.14, 0.12)
+    assert limit_prices(0.04, "2003-05-01") == (0.05, 0.03)
+    assert limit_prices(10, "2005-06-16") == (10.7, 9.3)            # 一般價位不受影響
+    for ref in (0.05, 0.08, 0.1, 0.13, 0.14):
+        u, d = limit_prices(ref, "2005-06-16")
+        assert u > ref and d < ref

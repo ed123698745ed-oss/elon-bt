@@ -80,7 +80,7 @@ def limit_pcts(date):
 
 def limit_prices(ref, date, kind="stock"):
     """依官方規則推算漲跌停價（只在判斷能否成交時用；事件由漲跌停定義時必須用官方逐日值）。
-    2015-06-01 前漲跌幅 7%，之後 10%；DOWN_35 期間跌幅 3.5%。漲停向下取到升降單位，跌停向上取；升降單位依日期與證券種類。
+    2015-06-01 前漲跌幅 7%，之後 10%；DOWN_35 期間跌幅 3.5%。漲停向下取到升降單位，跌停向上取；取整後不足一個升降單位者以一個升降單位計；升降單位依日期與證券種類。
     除權息日、減資恢復買賣日請傳入官方參考價；新上市（櫃）前五日無漲跌幅限制，不要呼叫本函式。
     """
     pu, pdn = limit_pcts(date)
@@ -89,6 +89,12 @@ def limit_prices(ref, date, kind="stock"):
     tu, td = tick_size(up_raw, kind, date), tick_size(dn_raw, kind, date)
     up = (up_raw / tu).to_integral_value(rounding=ROUND_FLOOR) * tu
     dn = (dn_raw / td).to_integral_value(rounding=ROUND_CEILING) * td
+    # 漲跌幅取整後不足一個升降單位（低價股）→ 以一個升降單位計，漲跌停不可等於基準價（Eve 退回 r69：1450 2005-06-16）
+    if up <= r:
+        up = r + tick_size(r, kind, date)
+    if dn >= r:
+        t = tick_size(r, kind, date)
+        dn = r - t if r - t > 0 else dn
     return float(up), float(dn)
 
 REF_BIDASK_FROM = pd.Timestamp("2011-03-28")  # 證交所 60 週年特刊：開盤競價基準決定原則修正，100-03-28 實施
