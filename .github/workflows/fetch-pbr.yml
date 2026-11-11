@@ -1,0 +1,41 @@
+name: fetch-pbr
+# 估值組：官方每日個股本益比、殖利率、股價淨值比（證交所 BWIBBU_d 2005-09-02 起；櫃買 peQryDate 2007-01-02 起）。
+# D-071-20261111-2354-1。可續傳，進度存 Release「raw-pbr」；每筆回應核對回傳日期與查詢一致。月底交易日優先抓。
+# 每天一次（台北 22:53）補當日；未抓完時下一次接續。
+on:
+  push:
+    paths: ["jobs/pbr.txt"]
+  schedule:
+    - cron: "53 14 * * *"
+  workflow_dispatch:
+permissions: { contents: write }
+jobs:
+  fetch:
+    strategy:
+      fail-fast: false
+      matrix:
+        src: [twse_pbr, tpex_pbr]
+    concurrency:
+      group: fetch-pbr-${{ matrix.src }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: restore
+        run: |
+          gh release view raw-pbr >/dev/null 2>&1 || gh release create raw-pbr --title raw-pbr --notes "估值組官方原始檔：每日本益比、殖利率、股價淨值比（自動更新）" --prerelease || true
+          gh release download raw-pbr -p pbr-${{ matrix.src }}.tar.gz || true
+          [ -f pbr-${{ matrix.src }}.tar.gz ] && tar xzf pbr-${{ matrix.src }}.tar.gz || mkdir -p raw
+          rm -f raw/_pbr_${{ matrix.src }}_complete
+      - name: fetch
+        run: BUDGET_MIN=320 GAP=${{ matrix.src == 'twse_pbr' && '3' || '1.5' }} python data_layer/fetch_pbr.py ${{ matrix.src }}
+      - name: save
+        if: always()
+        run: |
+          n=$(ls raw/pbr/${{ matrix.src }} 2>/dev/null | wc -l); echo "files=$n"
+          tar czf pbr-${{ matrix.src }}.tar.gz raw
+          sha256sum pbr-${{ matrix.src }}.tar.gz | tee pbr-${{ matrix.src }}.sha256
+          gh release upload raw-pbr pbr-${{ matrix.src }}.tar.gz pbr-${{ matrix.src }}.sha256 raw/_attempts_pbr_${{ matrix.src }}.csv --clobber
