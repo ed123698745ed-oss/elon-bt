@@ -25,7 +25,7 @@ groups:
   fin:
     title: 財報｜綜合損益表、資產負債表（FinMind 現行值）
     tags:
-      - {tag: fin-20261107, status: 未送驗收, note: FinMind 現行（最終修訂）值，非公告當時版本}
+      - {tag: fin-20261107, status: 已退回, note: "Eve 2026-11-11 退回：損益表 EquityAttributableToOwnersOfParent 混入歸母綜合損益（736 筆、49 檔），見 Eve_fin-20261107_20261111.md"}
   tdcc:
     title: 集保戶股權分散週表（Goodinfo，053 股票池 98 檔）
     tags:

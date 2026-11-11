@@ -1,5 +1,5 @@
 """報告首頁資料層標籤：由 write_report 自動寫入、check_report 能抓出漏標與漏警示。"""
-# 註：測試用的未驗收標籤取 fin-20261107（登記簿狀態「未送驗收」）；若其狀態改變，需改用另一個未驗收標籤。
+# 註：測試用的未驗收標籤取 revinst-20261111（登記簿狀態「未送驗收」）；若其狀態改變，需改用另一個未驗收標籤。
 import os, sys
 
 import pytest
@@ -29,20 +29,20 @@ def test_accepted_only_no_warning(tmp_path):
 
 
 def test_candidate_warning_and_tampering_detected(tmp_path):
-    _use([("data-20261105r68", "已驗收", ["daily_k"]), ("fin-20261107", "未送驗收", ["surveillance"])])
+    _use([("data-20261105r68", "已驗收", ["daily_k"]), ("revinst-20261111", "未送驗收", ["surveillance"])])
     p = report.write_report(str(tmp_path / "r.md"), "t", "c", "V1", "R1", "## 內文\n")
     head = open(p, encoding="utf-8").read().split("\n## ")[0]
-    assert report.WARN_LINE in head and "fin-20261107（未送驗收）【未驗收" in head
+    assert report.WARN_LINE in head and "revinst-20261111（未送驗收）【未驗收" in head
     assert report.check_report(p) == []
     t = open(p, encoding="utf-8").read().replace(report.WARN_LINE, "")       # 有人刪掉警示
     open(p, "w", encoding="utf-8").write(t)
     assert "用了未驗收資料但首頁沒有警示" in report.check_report(p)
-    open(p, "w", encoding="utf-8").write(t.replace("fin-20261107", "X"))
+    open(p, "w", encoding="utf-8").write(t.replace("revinst-20261111", "X"))
     assert any("缺標籤" in e for e in report.check_report(p))
 
 
 def _cand_report(tmp_path):
-    _use([("data-20261105r68", "已驗收", ["status"]), ("fin-20261107", "未送驗收", ["surveillance"])])
+    _use([("data-20261105r68", "已驗收", ["status"]), ("revinst-20261111", "未送驗收", ["surveillance"])])
     return report.write_report(str(tmp_path / "r.md"), "t", "c", "V1", "R1", "## 內文\n")
 
 
@@ -50,8 +50,8 @@ def test_eve_case_status_and_table_tampered_but_warning_kept(tmp_path):
     """Eve 複審案例：保留警示與原附檔，首頁 c2 改成已驗收、surveillance 改成 calendar，自檢必須抓到。"""
     p = _cand_report(tmp_path)
     t = open(p, encoding="utf-8").read()
-    t2 = t.replace("fin-20261107（未送驗收）【未驗收：未送驗收，結果不得作正式結論】：surveillance",
-                   "fin-20261107（已驗收）：calendar")
+    t2 = t.replace("revinst-20261111（未送驗收）【未驗收：未送驗收，結果不得作正式結論】：surveillance",
+                   "revinst-20261111（已驗收）：calendar")
     assert t2 != t and report.WARN_LINE in t2
     open(p, "w", encoding="utf-8").write(t2)
     errs = report.check_report(p)
@@ -62,7 +62,7 @@ def test_eve_case_status_and_table_tampered_but_warning_kept(tmp_path):
     ("：surveillance", "：calendar", "表名不符"),
     ("：status", "：status、daily_k", "表名不符"),
     ("data-20261105r68（已驗收）", "data-20261105r68（待複審）", "驗收狀態不符"),
-    ("；fin-20261107（未送驗收）【未驗收：未送驗收，結果不得作正式結論】：surveillance", "", "首頁缺標籤"),
+    ("；revinst-20261111（未送驗收）【未驗收：未送驗收，結果不得作正式結論】：surveillance", "", "首頁缺標籤"),
 ])
 def test_each_field_compared(tmp_path, old, new, msg):
     p = _cand_report(tmp_path)
@@ -76,9 +76,9 @@ def test_sidecar_status_must_match_registry(tmp_path):
     import json
     p = _cand_report(tmp_path)
     side = json.load(open(p + ".data_tags.json", encoding="utf-8"))
-    side["data_tags"]["fin-20261107"]["status"] = "已驗收"       # 連附檔一起改
+    side["data_tags"]["revinst-20261111"]["status"] = "已驗收"       # 連附檔一起改
     side["has_unaccepted"] = False
     json.dump(side, open(p + ".data_tags.json", "w", encoding="utf-8"), ensure_ascii=False)
-    t = open(p, encoding="utf-8").read().replace("fin-20261107（未送驗收）【未驗收：未送驗收，結果不得作正式結論】", "fin-20261107（已驗收）")
+    t = open(p, encoding="utf-8").read().replace("revinst-20261111（未送驗收）【未驗收：未送驗收，結果不得作正式結論】", "revinst-20261111（已驗收）")
     open(p, "w", encoding="utf-8").write(t)
     assert any("與登記簿" in e for e in report.check_report(p))
