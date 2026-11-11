@@ -1,0 +1,21 @@
+name: probe-mops
+on:
+  push:
+    paths: ["jobs/probe_mops.txt"]
+  workflow_dispatch:
+permissions: { contents: write }
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: python tools/probe_mops.py | tee probe_log.txt
+      - name: upload
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          tar czf probe-mops.tar.gz out_probe probe_log.txt
+          gh release view raw-cb >/dev/null 2>&1 || gh release create raw-cb --prerelease --title "raw-cb" --notes "可轉債原始檔（探測與下載進度）"
+          gh release upload raw-cb probe-mops.tar.gz --clobber
