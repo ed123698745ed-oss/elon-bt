@@ -17,4 +17,4 @@ for line in open("jobs/probe_mops.txt", encoding="utf-8"):
         print(name, r.status, len(b))
     except Exception as e:
         print(name, "ERR", e)
-    time.sleep(3)
+    time.sleep(20)

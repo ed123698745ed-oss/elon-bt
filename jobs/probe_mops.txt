@@ -1,6 +1,4 @@
-# 財報補正探測（fin-20261107 退回）：綜合損益彙總表 t163sb04 與個別公司綜合損益表 t164sb04
-s04_sii_11302	https://mopsov.twse.com.tw/mops/web/ajax_t163sb04	encodeURIComponent=1&step=1&firstin=1&off=1&isQuery=Y&TYPEK=sii&year=113&season=02
-s04_sii_11301	https://mopsov.twse.com.tw/mops/web/ajax_t163sb04	encodeURIComponent=1&step=1&firstin=1&off=1&isQuery=Y&TYPEK=sii&year=113&season=01
-s04_otc_10204	https://mopsov.twse.com.tw/mops/web/ajax_t163sb04	encodeURIComponent=1&step=1&firstin=1&off=1&isQuery=Y&TYPEK=otc&year=102&season=04
-c04_1701_11302	https://mopsov.twse.com.tw/mops/web/ajax_t164sb04	encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&isnew=false&co_id=1701&year=113&season=02
-c04_5820_10301	https://mopsov.twse.com.tw/mops/web/ajax_t164sb04	encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&isnew=false&co_id=5820&year=103&season=01
+# 財報補正探測（fin-20261107 退回）：證交所財報電子書是否保留已下市公司季報
+d_1701_11302	https://doc.twse.com.tw/server-java/t57sb01?step=1&colorchg=1&co_id=1701&year=113&seamon=2&mtype=A
+d_2311_10604	https://doc.twse.com.tw/server-java/t57sb01?step=1&colorchg=1&co_id=2311&year=106&seamon=4&mtype=A
+d_4152_10203	https://doc.twse.com.tw/server-java/t57sb01?step=1&colorchg=1&co_id=4152&year=102&seamon=3&mtype=A
