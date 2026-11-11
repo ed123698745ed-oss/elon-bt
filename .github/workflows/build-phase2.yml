@@ -22,6 +22,8 @@ jobs:
           mkdir -p p2 && cd p2
           gh release download raw-phase2 -p 'p2-*.tar.gz' -p 'p2-*.sha256'
           for s in twse_tri twse_ix tpex_ix twse_punish twse_notice tpex_disposal tpex_attention twse_margin tpex_margin twse_mark tpex_mark twse_fulldelivery tpex_chtm; do
+            # tpex_chtm（上櫃變更交易，2026-11-11 新增）下載完成前沒有原始檔：略過，fulldelivery 只含上市
+            if [ "$s" = tpex_chtm ] && [ ! -f p2-$s.sha256 ]; then echo "略過 $s（尚未發佈原始檔）"; continue; fi
             sha256sum -c p2-$s.sha256 || { echo "雜湊不符 $s"; exit 1; }
             tar xzf p2-$s.tar.gz
             [ -f raw/_phase2_${s}_complete ] || { echo "來源未完成下載：$s，停止"; exit 1; }
