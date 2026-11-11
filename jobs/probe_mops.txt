@@ -1,5 +1,2 @@
-q1	https://mopsov.twse.com.tw/mops/web/t120sb02_q1	
-q2	https://mopsov.twse.com.tw/mops/web/t120sb02_q2	
-q9	https://mopsov.twse.com.tw/mops/web/t120sb02_q9	
-q10	https://mopsov.twse.com.tw/mops/web/t120sb02_q10	
-t108sb08	https://mopsov.twse.com.tw/mops/web/t108sb08	
+a_h	https://mopsov.twse.com.tw/mops/web/ajax_t120sb02	run=Y&step=1&nh=h&bond_kind=5,7&firstin=true
+a_n	https://mopsov.twse.com.tw/mops/web/ajax_t120sb02	run=Y&step=1&nh=n&bond_kind=5,7&firstin=true
