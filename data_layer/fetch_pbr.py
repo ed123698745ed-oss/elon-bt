@@ -31,6 +31,8 @@ def ordered_days(src):
     """月底交易日優先，其餘交易日其後；兩段內都依日期遞增。"""
     ds = trading_days(START[src])
     me = [d for i, d in enumerate(ds) if i == len(ds) - 1 or ds[i + 1].month != d.month]
+    if os.environ.get("ONLY_MONTHEND") == "1":
+        return me
     s = set(me)
     return me + [d for d in ds if d not in s]
 
@@ -113,7 +115,7 @@ def main(src):
         if res not in ("ok", "empty"):
             missing += 1
         time.sleep(gap)
-    if missing == 0:
+    if missing == 0 and os.environ.get("ONLY_MONTHEND") != "1":
         open(os.path.join(RAW, f"_pbr_{src}_complete"), "w").write(f"{TODAY.isoformat()}\n")
     print(src, "fetched", done, "missing", missing)
 

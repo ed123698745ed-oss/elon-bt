@@ -30,8 +30,16 @@ jobs:
           gh release download raw-pbr -p pbr-${{ matrix.src }}.tar.gz || true
           [ -f pbr-${{ matrix.src }}.tar.gz ] && tar xzf pbr-${{ matrix.src }}.tar.gz || mkdir -p raw
           rm -f raw/_pbr_${{ matrix.src }}_complete
-      - name: fetch
-        run: BUDGET_MIN=320 GAP=${{ matrix.src == 'twse_pbr' && '3' || '1.5' }} python data_layer/fetch_pbr.py ${{ matrix.src }}
+      - name: fetch month-end
+        run: ONLY_MONTHEND=1 BUDGET_MIN=120 GAP=${{ matrix.src == 'twse_pbr' && '3' || '1.5' }} python data_layer/fetch_pbr.py ${{ matrix.src }}
+      - name: save month-end
+        if: always()
+        run: |
+          tar czf pbr-${{ matrix.src }}.tar.gz raw
+          sha256sum pbr-${{ matrix.src }}.tar.gz | tee pbr-${{ matrix.src }}.sha256
+          gh release upload raw-pbr pbr-${{ matrix.src }}.tar.gz pbr-${{ matrix.src }}.sha256 raw/_attempts_pbr_${{ matrix.src }}.csv --clobber
+      - name: fetch rest
+        run: BUDGET_MIN=200 GAP=${{ matrix.src == 'twse_pbr' && '3' || '1.5' }} python data_layer/fetch_pbr.py ${{ matrix.src }}
       - name: save
         if: always()
         run: |
