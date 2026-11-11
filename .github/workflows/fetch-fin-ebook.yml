@@ -1,0 +1,35 @@
+name: fetch-fin-ebook
+# 財報補正：證交所財報電子書季報／年報（fin-20261107 退回後回補歸母淨利、非控制權益淨利；Ed 2026-11-11 選「恆等式＋電子書」）。
+# 可續傳；進度與頁面文字存 Release raw-fin-ebook（p-ebook.tar.gz）。
+on:
+  push:
+    paths: ["data_seed/fin_ebook_reports.csv", "data_layer/fetch_fin_ebook.py"]
+  schedule:
+    - cron: "41 */6 * * *"
+  workflow_dispatch:
+permissions: { contents: write }
+concurrency: { group: fetch-fin-ebook, cancel-in-progress: false }
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    env: { GH_TOKEN: "${{ github.token }}" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install pypdfium2
+      - name: restore
+        run: |
+          gh release view raw-fin-ebook >/dev/null 2>&1 || gh release create raw-fin-ebook --prerelease --title raw-fin-ebook --notes "財報電子書頁面文字與下載進度（財報補正用）"
+          gh release download raw-fin-ebook -p p-ebook.tar.gz && tar xzf p-ebook.tar.gz || mkdir -p raw_ebook
+          if [ -f raw_ebook/_complete ]; then echo "DONE=1" >> $GITHUB_ENV; fi
+      - name: fetch
+        if: env.DONE != '1'
+        run: OUT=raw_ebook INTERVAL=20 BUDGET_MIN=320 python data_layer/fetch_fin_ebook.py || echo "結束碼 $?"
+      - name: save
+        if: always() && env.DONE != '1'
+        run: |
+          tar czf p-ebook.tar.gz raw_ebook
+          sha256sum p-ebook.tar.gz > p-ebook.sha256
+          gh release upload raw-fin-ebook p-ebook.tar.gz p-ebook.sha256 raw_ebook/_attempts.csv --clobber
