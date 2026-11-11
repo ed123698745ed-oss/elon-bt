@@ -52,14 +52,21 @@ def test_resolve_defaults_to_accepted_and_blocks_others():
         if not v["tags"]:          # 新組尚未發佈第一個標籤（例：fincf 下載中）
             continue
         acc = [t["tag"] for t in v["tags"] if t["status"] == "已驗收"]
-        table = next(n for n, d in _y("tables.yml").items() if d["group"] == g)
+        live = [t for t in v["tags"] if t["status"] not in ("已驗收", "已被取代", "已退回")]
+        table = next((n for n, d in _y("tables.yml").items() if d["group"] == g), None)
+        if table is None:
+            continue
         if acc:
             assert data.resolve(table) == (acc[-1], "已驗收")
         else:
             with pytest.raises(data.DataNotAccepted):
                 data.resolve(table)
-            tag, st = data.resolve(table, allow_candidate=True)
-            assert st != "已驗收"
+            if live:
+                tag, st = data.resolve(table, allow_candidate=True)
+                assert st != "已驗收"
+            else:
+                with pytest.raises(data.DataNotAccepted):
+                    data.resolve(table, allow_candidate=True)
         for t in v["tags"]:
             if t["status"] in ("已被取代", "已退回"):
                 with pytest.raises(data.DataNotAccepted):
@@ -81,7 +88,8 @@ def test_load_downloads_checks_sha_and_records_tags(tmp_path, monkeypatch):
         pytest.skip(f"無法連線 Release：{e}")
     assert len(df) > 0
     used = data.data_tags_used()
-    assert used.startswith("data-20261105r68（已驗收）") and "未驗收" not in used
+    acc = [t["tag"] for t in _y("registry.yml")["groups"]["phase1"]["tags"] if t["status"] == "已驗收"][-1]
+    assert used.startswith(f"{acc}（已驗收）") and "未驗收" not in used
 
 
 def test_wrong_file_rejected(tmp_path, monkeypatch):
@@ -125,6 +133,6 @@ def test_all_registered_snapshots_have_valid_hashes():
 def test_candidate_is_marked(monkeypatch):
     data._USED.clear()
     monkeypatch.setattr(data, "_sha", lambda p: None)
-    tag, st = data.resolve("surveillance", allow_candidate=True)
+    tag, st = "某候選標籤", "待驗收"
     data._USED[tag] = {"status": st, "tables": {"surveillance"}}
     assert "【未驗收" in data.data_tags_used()

@@ -84,7 +84,8 @@ def main():
             est = bool(sv is not None and k in EST and re.search(EST[k], src_s))
             if ov is not None and not (isinstance(ov, float) and pd.isna(ov)):
                 r[k], r[k + "_src"] = ov, OFF
-                if sv is not None and not est and ov != sv:
+                same = (abs(float(ov) - float(sv)) < 1e4) if k == "amount_issued" and sv is not None else (abs(float(ov) - float(sv)) < 1e-9 if k == "coupon_rate" and sv is not None else ov == sv)
+                if sv is not None and not est and not same:
                     conflicts.append(f"{k}（官方 {ov.date() if hasattr(ov,'date') else ov}／種子 {sv.date() if hasattr(sv,'date') else sv}）")
             elif sv is not None and not est:
                 r[k], r[k + "_src"] = sv, f"種子：{src_s}"

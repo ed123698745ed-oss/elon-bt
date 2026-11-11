@@ -1,0 +1,42 @@
+name: build-cb
+# 可轉債組建置：jobs/cb_build.txt 寫 tag=cb-YYYYMMDD[cN]；下載未完成時也可建（官方未取得者標「未下載」），測試未過不發布。
+on:
+  push:
+    paths: ["jobs/cb_build.txt"]
+  workflow_dispatch:
+permissions: { contents: write }
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env: { GH_TOKEN: "${{ github.token }}" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install pandas pyarrow pytest
+      - name: get raw
+        run: |
+          gh release download raw-cb -p p-cb.tar.gz -p p-cb.sha256
+          sha256sum -c p-cb.sha256
+          tar xzf p-cb.tar.gz
+          echo "COMPLETE=$([ -f raw/_cb_complete ] && echo yes || echo no)" >> $GITHUB_ENV
+      - name: build
+        run: RAW=raw OUT=out python data_layer/build_cb.py | tee build_log.txt
+      - name: tests
+        run: |
+          set +e; CB_OUT=out python -m pytest -q -rA tests/test_cb.py > test_output.txt 2>&1; echo "TEST_RC=$?" >> $GITHUB_ENV; tail -3 test_output.txt
+      - name: tests must pass
+        run: if [ "$TEST_RC" != "0" ]; then cat test_output.txt | tail -30; exit 1; fi
+      - name: publish
+        run: |
+          TAG=$(grep -o 'tag=[^ ]*' jobs/cb_build.txt | tail -1 | cut -d= -f2)
+          python - <<PY
+          import hashlib, json, glob, os
+          files = {os.path.basename(f): {"sha256": hashlib.sha256(open(f,"rb").read()).hexdigest(), "rows": __import__("pandas").read_parquet(f).shape[0]} for f in glob.glob("out/*.parquet")}
+          json.dump({"data_tag": "$TAG", "code_commit": os.environ["GITHUB_SHA"], "tests_exit_code": int(os.environ["TEST_RC"]),
+                     "raw_sha256": open("p-cb.sha256").read().split()[0], "download_complete": os.environ["COMPLETE"], "files": files},
+                    open("out/manifest.json","w"), ensure_ascii=False, indent=1)
+          PY
+          cp build_log.txt test_output.txt out/
+          gh release create "$TAG" out/* --prerelease --title "$TAG" --notes "可轉債組候選標籤（Eve 驗收前不得供策略正式使用）。下載完成：$COMPLETE"

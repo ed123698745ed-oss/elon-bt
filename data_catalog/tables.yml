@@ -146,3 +146,17 @@ institutional:
   key: date + stock_id + name
   timing: 當日盤後公布，次一交易日開盤可用
   caveats: 單位為股；長表格式（name＝法人別）；2012-05 前每年僅約 400～680 檔，之後才接近全市場；外資 2017 起拆出 Foreign_Dealer_Self（外資自營商），Foreign_Investor 為不含外資自營商；自營商 2014 起拆為 Dealer_self／Dealer_Hedging；431 個代號無資料
+cb_issues:
+  group: cb
+  title: 可轉債發行基本資料（每檔一列）
+  use: 發行日、到期日、下櫃日、轉換期間、發行總額、發行時轉換價、擔保、票面利率、董事會決議日、訂價日、首次賣回日
+  key: bond_id
+  timing: 各欄日期本身即事件日；董事會決議日、訂價日為種子資料，可得時點以公告日為準
+  caveats: 官方（公開資訊觀測站 t120sg01）為主，缺漏才用 Ed 種子清單（20260830）；每欄有 _src；推算值只在 _est 欄、不進主欄；conflict 列官方與種子不一致者；flags 列多世代歧義、疑年報董事會日等待核；official_status＝未下載／官方查無者主欄全為種子值；代號會回收再用，串接時須同時看發行日
+cb_conv_price:
+  group: cb
+  title: 可轉債轉換價格調整紀錄
+  use: 各次轉換價調整的生效日與調整前後價格
+  key: bond_id + effective + price_before + price_after
+  timing: 以申報日（report_date_roc）收盤後可得，effective 為生效日
+  caveats: 來源為 Ed 種子清單（MOPS 轉換價格調整公告），已去重；in_issues＝False 的 31 筆代號不在主清單；發行時轉換價另見 cb_issues.conv_price_issue（官方）
