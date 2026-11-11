@@ -1,0 +1,35 @@
+name: fetch-cb
+# 可轉債發行基本資料（公開資訊觀測站 t120sg01），可續傳；進度與原始檔存 Release raw-cb（p-cb.tar.gz）。
+on:
+  push:
+    paths: ["jobs/cb_targets.csv", "data_layer/fetch_cb.py"]
+  schedule:
+    - cron: "23 */6 * * *"
+  workflow_dispatch:
+permissions: { contents: write }
+concurrency: { group: fetch-cb, cancel-in-progress: false }
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    env: { GH_TOKEN: "${{ github.token }}" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - name: restore
+        run: |
+          mkdir -p raw
+          gh release view raw-cb >/dev/null 2>&1 || gh release create raw-cb --prerelease --title raw-cb --notes "可轉債原始檔"
+          gh release download raw-cb -p p-cb.tar.gz && tar xzf p-cb.tar.gz || echo "首次"
+          if [ -f raw/_cb_complete ]; then echo "DONE=1" >> $GITHUB_ENV; fi
+      - name: fetch
+        if: env.DONE != '1'
+        run: BUDGET_MIN=320 GAP=3 python data_layer/fetch_cb.py
+      - name: save
+        if: always() && env.DONE != '1'
+        run: |
+          tar czf p-cb.tar.gz raw
+          sha256sum p-cb.tar.gz > p-cb.sha256
+          cp raw/_attempts_cb.csv . || true
+          gh release upload raw-cb p-cb.tar.gz p-cb.sha256 _attempts_cb.csv --clobber
