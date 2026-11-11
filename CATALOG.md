@@ -11,7 +11,7 @@
 | 組 | 內容 | 預設（已驗收） | 最新未驗收版本 |
 |---|---|---|---|
 | phase1 | 第一期｜日K、公司行動、市場別、交易日曆 | ✅ data-20261110r72 | — |
-| phase2 | 第二期｜指數、處置注意、融資融券註記、平盤下名單、變更交易 | 無（load 會拒絕，需 allow_candidate） | 🟡 data-phase2-20261111c5（待驗收） |
+| phase2 | 第二期｜指數、處置注意、融資融券註記、平盤下名單、變更交易 | ✅ data-phase2-20261111c5 | — |
 | fin | 財報｜綜合損益表、資產負債表（FinMind 現行值） | 無（load 會拒絕，需 allow_candidate） | ⚪ fin-20261107（未送驗收） |
 | tdcc | 集保戶股權分散週表（Goodinfo，053 股票池 98 檔） | 無（load 會拒絕，需 allow_candidate） | ⚪ data-tdcc-20261111（未送驗收） |
 | fincf | 現金流量表、現行產業別（FinMind 現行值；D-070-20261111-1424-1） | 無（load 會拒絕，需 allow_candidate） | — |
@@ -33,12 +33,12 @@
 | `listing_periods` | 掛牌期間 | 當時母體（universe_on 唯一接受的輸入） | phase1 ✅ | 161,403 | 1962-02-09～2026-11-03 | 事前已知 |
 | `market_segments` | 市場別區段 | 上市／上櫃轉換時點 | phase1 ✅ | 162,419 | 1999-01-05～2026-11-03 | 事前已知 |
 | `status` | 個股掛牌狀態 | 上市／上櫃／未定，及有無官方上市櫃日 | phase1 ✅ | 3,252 |  | 查核用 |
-| `index_daily` | 指數日資料 | 加權與櫃買開高低收、加權報酬指數（超額報酬基準） | phase2 🟡 | 6,900 | 1999-01-05～2026-11-11 | 當日收盤後 |
-| `surveillance` | 處置與注意公告 | 處置期間、注意股事件 | phase2 🟡 | 114,506 | 2001-01-02～2026-11-10 | 公布日收盤後可得，最早次一交易日使用 |
-| `margin_flags` | 融資融券註記（停資、停券、停止買賣） | 放空腿能否融券、停止買賣 | phase2 🟡 | 8,503,993 | 2001-01-02～2026-11-03 | data_date 收盤後公布，effective（次一交易日）生效 |
-| `downtick_list` | 平盤下得融（借）券賣出名單 | 當日能否平盤下放空 | phase2 🟡 | 5,106,024 | 2013-09-18～2026-11-03 | 當日開盤前已知 |
-| `downtick_coverage` | 平盤下名單逐日覆蓋狀態 | 判斷某市場某日名單是有資料還是缺口 | phase2 🟡 | 6,403 | 2013-09-18～2026-11-03 | 查核用 |
-| `fulldelivery` | 變更交易（全額交割）名單（上市＋上櫃） | 預收款券、分盤集合競價；排除全額交割／管理股票 | phase2 🟡 | 246,447 | 2004-12-24～2026-11-03 | 當日 |
+| `index_daily` | 指數日資料 | 加權與櫃買開高低收、加權報酬指數（超額報酬基準） | phase2 ✅ | 6,900 | 1999-01-05～2026-11-11 | 當日收盤後 |
+| `surveillance` | 處置與注意公告 | 處置期間、注意股事件 | phase2 ✅ | 114,506 | 2001-01-02～2026-11-10 | 公布日收盤後可得，最早次一交易日使用 |
+| `margin_flags` | 融資融券註記（停資、停券、停止買賣） | 放空腿能否融券、停止買賣 | phase2 ✅ | 8,503,993 | 2001-01-02～2026-11-03 | data_date 收盤後公布，effective（次一交易日）生效 |
+| `downtick_list` | 平盤下得融（借）券賣出名單 | 當日能否平盤下放空 | phase2 ✅ | 5,106,024 | 2013-09-18～2026-11-03 | 當日開盤前已知 |
+| `downtick_coverage` | 平盤下名單逐日覆蓋狀態 | 判斷某市場某日名單是有資料還是缺口 | phase2 ✅ | 6,403 | 2013-09-18～2026-11-03 | 查核用 |
+| `fulldelivery` | 變更交易（全額交割）名單（上市＋上櫃） | 預收款券、分盤集合競價；排除全額交割／管理股票 | phase2 ✅ | 246,447 | 2004-12-24～2026-11-03 | 當日 |
 | `financials` | 財報（綜合損益表、資產負債表） | 財報類多空卡的基本面數字 | fin ⚪ | 10,466,736 | 1990-03-31～2026-09-30 | date 為財報期末，不是公告日；可得時點須依法定申報期限另行推算 |
 | `cashflow` | 現金流量表（FinMind TaiwanStockCashFlowsStatement） | 營業／投資現金流、自由現金流（070 等） | fincf | — | — | date 為財報期末，不是公告日；可得時點須依法定申報期限另行推算 |
 | `industry` | 現行產業別（FinMind TaiwanStockInfo） | 排除金融保險業等產業篩選 | fincf | — | — | 現行分類，非歷史；回溯使用須在個案揭露 |
@@ -137,7 +137,7 @@
 - 主鍵：date
 - 可得時點：當日收盤後
 - 注意：加權報酬指數只有收盤、2003 年起；櫃買報酬指數無官方歷史，不提供
-- 🟡 data-phase2-20261111c5：6,900 列；期間 1999-01-05～2026-11-11
+- ✅ data-phase2-20261111c5：6,900 列；期間 1999-01-05～2026-11-11
 - 欄位：`date`、`taiex_open`、`taiex_high`、`taiex_low`、`taiex_close`、`taiex_tri_close`、`tpex_open`、`tpex_high`、`tpex_low`、`tpex_close`
 
 ### `surveillance`｜處置與注意公告
@@ -145,8 +145,8 @@
 - 用途：處置期間、注意股事件
 - 主鍵：market + kind + announce + code + start + reason
 - 可得時點：公布日收盤後可得，最早次一交易日使用
-- 注意：先用 sec_kind 篩證券類型；處置區間重疊請用 phase2_tools.disposal_intervals 合併；period_flag 標取消／恢復、起訖同日、期間逾 60 日、表格與內文日期不符（disposal_intervals 預設只取兩者交集、待核日期排除；聯集須指定 conflict="union"）；parse_note 標休市日等待核項目
-- 🟡 data-phase2-20261111c5：114,506 列；期間 2001-01-02～2026-11-10
+- 注意：count 欄為發布快照值，當作歷史時點訊號須另核當時公布值（Eve c5）；先用 sec_kind 篩證券類型；處置區間重疊請用 phase2_tools.disposal_intervals 合併；period_flag 標取消／恢復、起訖同日、期間逾 60 日、表格與內文日期不符（disposal_intervals 預設只取兩者交集、待核日期排除；聯集須指定 conflict="union"）；parse_note 標休市日等待核項目
+- ✅ data-phase2-20261111c5：114,506 列；期間 2001-01-02～2026-11-10
 - 欄位：`market`、`kind`、`announce`、`code`、`name`、`count`、`reason`、`start`、`end`、`measure`、`match_min`、`prepay`、`detail`、`parse_note`、`sec_kind`、`period_days`、`detail_start`、`detail_end`、`period_flag`、`overlap_prev`
 
 ### `margin_flags`｜融資融券註記（停資、停券、停止買賣）
@@ -155,7 +155,7 @@
 - 主鍵：market + data_date + code
 - 可得時點：data_date 收盤後公布，effective（次一交易日）生效
 - 注意：上市 2001 起、上櫃 2007 起；櫃買 $、E 符號官方未列（21,947 筆資料不足）；早年代碼含義未驗證
-- 🟡 data-phase2-20261111c5：8,503,993 列；期間 2001-01-02～2026-11-03
+- ✅ data-phase2-20261111c5：8,503,993 列；期間 2001-01-02～2026-11-03
 - 欄位：`data_date`、`effective`、`market`、`code`、`stop_fin`、`stop_short`、`stop_trade`、`short_alloc`、`fin_alloc`、`note_raw`、`unknown_codes`、`parse_note`、`sec_kind`
 
 ### `downtick_list`｜平盤下得融（借）券賣出名單
@@ -164,7 +164,7 @@
 - 主鍵：date + market + code
 - 可得時點：當日開盤前已知
 - 注意：2013-09 起；downtick_ban_prev_limit 的意義看 ban_rule（跌停／跌幅達3.5%／全面禁止，全面禁止期間 ETF 除外）；不在名單者不可平盤下放空；缺口日見 downtick_coverage
-- 🟡 data-phase2-20261111c5：5,106,024 列；期間 2013-09-18～2026-11-03
+- ✅ data-phase2-20261111c5：5,106,024 列；期間 2013-09-18～2026-11-03
 - 欄位：`date`、`market`、`code`、`short_susp`、`sbl_susp`、`downtick_ban_prev_limit`、`ban_rule`、`sec_kind`
 
 ### `downtick_coverage`｜平盤下名單逐日覆蓋狀態
@@ -173,7 +173,7 @@
 - 主鍵：date + market
 - 可得時點：查核用
 - 注意：櫃買 2019-10-02 為資料缺口（官方回空表），不可當成無限制
-- 🟡 data-phase2-20261111c5：6,403 列；期間 2013-09-18～2026-11-03
+- ✅ data-phase2-20261111c5：6,403 列；期間 2013-09-18～2026-11-03
 - 欄位：`date`、`market`、`rows`、`status`
 
 ### `fulldelivery`｜變更交易（全額交割）名單（上市＋上櫃）
@@ -182,7 +182,7 @@
 - 主鍵：date + code
 - 可得時點：當日
 - 注意：上市 2004-12-24 起（TWT85U）；上櫃 2008-04-09 起（櫃買 afterTrading/chtm，kind 記變更交易／管理股票），2005-06～2008-04 上櫃名單不在本表；上市 period_auction 在 2007-11-01 前為空值（未知）；c4 起含上櫃，舊標籤只有上市
-- 🟡 data-phase2-20261111c5：246,447 列；期間 2004-12-24～2026-11-03
+- ✅ data-phase2-20261111c5：246,447 列；期間 2004-12-24～2026-11-03
 - 欄位：`date`、`market`、`code`、`name`、`period_auction`、`kind`、`sec_kind`
 
 ### `financials`｜財報（綜合損益表、資產負債表）
@@ -264,7 +264,7 @@
 | phase2 | data-phase2-20261107c2 | ↩️ 已退回 | Eve 2026-11-10 退回：2023-02-23 ban_rule 錯標、處置表格與內文日期衝突未標 | a7365cb | 通過 |
 | phase2 | data-phase2-20261110c3 | ↩️ 已退回 | Eve 2026-11-11 退回：disposal_intervals 預設聯集會把待核日期算成處置日 | e5d5c18 | 通過 |
 | phase2 | data-phase2-20261111c4 | ⛔ 已被取代 | 含 c3 退回補正但不含上櫃變更交易（下載未完成時建置）；未送審，由 c5 取代 |  |  |
-| phase2 | data-phase2-20261111c5 | 🟡 待驗收 | 補正 Eve 退回 c3（處置區間預設排除待核日期）＋上櫃變更交易名單（2008-04-09 起，Ed 2026-11-11 核准） | 0142b09 | 通過 |
+| phase2 | data-phase2-20261111c5 | ✅ 已驗收 | Eve 驗收通過（2026-11-11，Eve_c5_20261111.md）。補正 Eve 退回 c3（處置區間預設排除待核日期）＋上櫃變更交易名單（2008-04-09 起，Ed 2026-11-11 核准） | 0142b09 | 通過 |
 | fin | fin-20261107 | ⚪ 未送驗收 | FinMind 現行（最終修訂）值，非公告當時版本 | 7c7b6f0 |  |
 | tdcc | data-tdcc-20261111 | ⚪ 未送驗收 | 2015-05～2026-11；兩份原檔合併，重疊 188 列無衝突；比例多數僅小數一位 |  |  |
 | revinst | revinst-20261111 | ⚪ 未送驗收 | 月營收 2002-02～2026-11、法人 2005-01～2026-11（2012-05 前覆蓋僅約 400～680 檔）；D-067-20261111-0016-1 | cb6dbee |  |

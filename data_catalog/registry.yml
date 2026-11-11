@@ -21,7 +21,7 @@ groups:
       - {tag: data-phase2-20261107c2, status: 已退回, note: Eve 2026-11-10 退回：2023-02-23 ban_rule 錯標、處置表格與內文日期衝突未標}
       - {tag: data-phase2-20261110c3, status: 已退回, note: Eve 2026-11-11 退回：disposal_intervals 預設聯集會把待核日期算成處置日}
       - {tag: data-phase2-20261111c4, status: 已被取代, note: 含 c3 退回補正但不含上櫃變更交易（下載未完成時建置）；未送審，由 c5 取代}
-      - {tag: data-phase2-20261111c5, status: 待驗收, note: 補正 Eve 退回 c3（處置區間預設排除待核日期）＋上櫃變更交易名單（2008-04-09 起，Ed 2026-11-11 核准）}
+      - {tag: data-phase2-20261111c5, status: 已驗收, note: Eve 驗收通過（2026-11-11，Eve_c5_20261111.md）。補正 Eve 退回 c3（處置區間預設排除待核日期）＋上櫃變更交易名單（2008-04-09 起，Ed 2026-11-11 核准）}
   fin:
     title: 財報｜綜合損益表、資產負債表（FinMind 現行值）
     tags:
