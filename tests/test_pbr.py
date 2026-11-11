@@ -32,9 +32,12 @@ def test_pbr_nonnegative_or_missing(v):
     assert (x >= 0).all()
 
 
-def test_start_dates(v):
-    assert v[v.market == "上市"].date.min() == pd.Timestamp("2005-09-02")
-    assert v[v.market == "上櫃"].date.min() == pd.Timestamp("2007-01-02")
+def test_start_dates(v, cv):
+    """全量建置（無 missing）時首日須為官方起點；月底版只檢查不早於官方起點。"""
+    full = not (cv.status == "missing").any()
+    for m, d0 in (("上市", "2005-09-02"), ("上櫃", "2007-01-02")):
+        got = v[v.market == m].date.min()
+        assert (got == pd.Timestamp(d0)) if full else (got >= pd.Timestamp(d0)), (m, got)
 
 
 def test_coverage_rows_match_data(v, cv):
