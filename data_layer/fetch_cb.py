@@ -14,7 +14,7 @@ FALLBACK = [f"{y}06" for y in range(2006, 2027)]
 
 
 def get(url):
-    r = urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": UA, "Referer": "https://mopsov.twse.com.tw/mops/web/t120sb02_q10"}), timeout=60)
+    r = urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": UA, "Referer": "https://mopsov.twse.com.tw/mops/web/t120sb02_q10"}), timeout=30)
     return r.read().decode("utf-8", "ignore")
 
 
@@ -41,8 +41,13 @@ def main():
             left += 1
             continue
         months = [m for m in tg["months"].split(";") if m]
+        if months:   # 有線索者只補試線索年份前後一年的 6 月，避免每檔試滿 21 年
+            ys = sorted(int(m[:4]) for m in months)
+            fb = [f"{y}06" for y in range(max(2006, ys[0] - 1), min(2026, ys[-1] + 1) + 1)]
+        else:
+            fb = FALLBACK
         tried, hit = [], None
-        for m in months + [x for x in FALLBACK if x not in months]:
+        for m in months + [x for x in fb if x not in months]:
             try:
                 h = get(BASE.format(b=b, y=tg["yrn"], i=tg["issuer"], m=m))
             except Exception as e:
