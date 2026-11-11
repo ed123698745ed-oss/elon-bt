@@ -160,3 +160,17 @@ cb_conv_price:
   key: bond_id + effective + price_before + price_after
   timing: 以申報日（report_date_roc）收盤後可得，effective 為生效日
   caveats: 來源為 Ed 種子清單（MOPS 轉換價格調整公告），已去重；in_issues＝False 的 31 筆代號不在主清單；發行時轉換價另見 cb_issues.conv_price_issue（官方）
+valuation_daily:
+  group: pbr
+  title: 官方每日個股本益比、殖利率、股價淨值比（上市＋上櫃）
+  use: 淨值比／本益比選股（071 等）；官方每日公布值即當日可得之數字
+  key: date + market + stock_id
+  timing: 當日收盤後公布，次一交易日開盤可用
+  caveats: 上市 2005-09-02 起、上櫃 2007-01-02 起；含 ETF 等非普通股，使用時自行篩選；「-」「N/A」為缺值（虧損或淨值為負等，官方不計算）不推估；name_star＝名稱附「*」（無面額或面額非 10 元，官方自換發新股起配合調整）；欄位歷年不同，fin_period（財報年/季）僅近年有值；淨值比所用財報期別依官方當日採用，非本層推算
+valuation_coverage:
+  group: pbr
+  title: 估值表逐日覆蓋狀態
+  use: 判斷某市場某日是有資料、官方查無，還是尚未取得
+  key: date + market
+  timing: 查核用
+  caveats: status＝ok／empty（官方明示查無）／missing（尚未取得）；month_end 標每月最後一個交易日

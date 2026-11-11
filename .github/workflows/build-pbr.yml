@@ -1,0 +1,57 @@
+name: build-pbr
+# 估值組候選標籤：由 Release「raw-pbr」建置 valuation_daily、valuation_coverage（D-071-20261111-2354-1）。
+# jobs/pbr_build.txt 指定 tag= 與 require=（all｜monthend）；標籤已存在就停止（不覆蓋）；測試未過不發布。
+on:
+  push:
+    paths: ["jobs/pbr_build.txt"]
+  workflow_dispatch:
+permissions: { contents: write }
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install pandas pyarrow pytest
+      - name: get raw
+        run: |
+          mkdir -p pb && cd pb
+          gh release download raw-pbr -p 'pbr-*.tar.gz' -p 'pbr-*.sha256' -p '_attempts_pbr_*.csv'
+          for s in twse_pbr tpex_pbr; do sha256sum -c pbr-$s.sha256 || { echo "雜湊不符 $s"; exit 1; }; tar xzf pbr-$s.tar.gz; done
+          cat pbr-*.sha256 > ../raw_sha256.txt
+      - name: build
+        run: |
+          REQ=$(grep -o 'require=[a-z]*' jobs/pbr_build.txt | tail -1 | cut -d= -f2)
+          RAW=pb/raw CAL=jobs/trading_days.txt OUT=out REQUIRE=${REQ:-all} python data_layer/build_pbr.py | tee out_build.txt
+      - name: tests
+        run: |
+          set +e
+          PBR_OUT=out python -m pytest -q -rA tests/test_pbr.py > out/test_output.txt 2>&1
+          echo "TEST_RC=$?" >> $GITHUB_ENV
+          tail -3 out/test_output.txt
+      - name: tests must pass
+        run: |
+          if [ "$TEST_RC" != "0" ]; then echo "測試未通過（rc=$TEST_RC），不發布"; tail -40 out/test_output.txt; exit 1; fi
+      - name: publish
+        run: |
+          export TAG=$(grep -o 'tag=[A-Za-z0-9._-]*' jobs/pbr_build.txt | tail -1 | cut -d= -f2)
+          [ -z "$TAG" ] && { echo "未指定 tag"; exit 1; }
+          if gh release view "$TAG" >/dev/null 2>&1; then echo "release $TAG 已存在，停止"; exit 1; fi
+          mv out_build.txt out/build_log.txt
+          python - <<'P'
+          import glob, hashlib, json, os
+          import pandas as pd
+          files = {}
+          for f in sorted(glob.glob("out/*.parquet")):
+              files[os.path.basename(f)] = {"rows": len(pd.read_parquet(f)), "sha256": hashlib.sha256(open(f, "rb").read()).hexdigest()}
+          m = {"data_tag": os.environ["TAG"], "code_commit": os.environ["GITHUB_SHA"], "files": files,
+               "raw_assets_sha256": open("raw_sha256.txt").read().split("\n"), "tests_exit_code": int(os.environ.get("TEST_RC", "-1")),
+               "calendar": "jobs/trading_days.txt", "note": "估值組候選標籤；Eve 驗收前不得供策略正式使用"}
+          json.dump(m, open("out/manifest.json", "w"), ensure_ascii=False, indent=1)
+          P
+          cp pb/_attempts_pbr_*.csv out/ || true
+          gh release create "$TAG" --prerelease --title "$TAG 估值組（候選）" --notes "valuation_daily（官方每日本益比、殖利率、股價淨值比）、valuation_coverage（逐日逐市場覆蓋）。清冊 manifest.json；建置 build_log.txt；測試 test_output.txt。Eve 驗收前不得供策略正式使用。" out/*
