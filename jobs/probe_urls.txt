@@ -1,2 +1,9 @@
-https://www.tpex.org.tw/www/zh-tw/margin/mark?date=2019/10/02&response=json
-https://www.tpex.org.tw/www/zh-tw/margin/mark?date=2019/10/03&response=json
+https://www.twse.com.tw/rwd/zh/afterTrading/BWIBBU_d?date=20050902&selectType=ALL&response=json
+https://www.twse.com.tw/rwd/zh/afterTrading/BWIBBU_d?date=20080410&selectType=ALL&response=json
+https://www.twse.com.tw/rwd/zh/afterTrading/BWIBBU_d?date=20260130&selectType=ALL&response=json
+https://www.twse.com.tw/rwd/zh/afterTrading/BWIBBU_d?date=20080412&selectType=ALL&response=json
+https://www.tpex.org.tw/www/zh-tw/afterTrading/peQryDate?date=2007/01/02&response=json
+https://www.tpex.org.tw/www/zh-tw/afterTrading/peQryDate?date=2008/04/10&response=json
+https://www.tpex.org.tw/www/zh-tw/afterTrading/peQryDate?date=2026/01/30&response=json
+https://www.tpex.org.tw/www/zh-tw/afterTrading/peQryDate?date=2008/04/12&response=json
+https://www.tpex.org.tw/web/stock/aftertrading/peratio_analysis/pera_result.php?l=zh-tw&d=97/04/10&o=json
