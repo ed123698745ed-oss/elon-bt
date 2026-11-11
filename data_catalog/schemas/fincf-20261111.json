@@ -1,8 +1,78 @@
 {
  "tag": "fincf-20261111",
- "manifest": null,
- "code_commit": null,
+ "manifest": "manifest_cashflow.json",
+ "code_commit": "4f6ddcb19f2b5f43d38fc2c9fc881e14ad401752",
  "tests_exit_code": null,
  "source_asof": null,
- "tables": {}
+ "tables": {
+  "cashflow": {
+   "rows": 2596525,
+   "size": 15529001,
+   "columns": [
+    {
+     "name": "stock_id",
+     "type": "large_string"
+    },
+    {
+     "name": "date",
+     "type": "large_string"
+    },
+    {
+     "name": "dataset",
+     "type": "large_string"
+    },
+    {
+     "name": "type",
+     "type": "large_string"
+    },
+    {
+     "name": "value",
+     "type": "double"
+    },
+    {
+     "name": "origin_name",
+     "type": "large_string"
+    }
+   ],
+   "ranges": {
+    "date": [
+     "2008-06-30",
+     "2026-09-30"
+    ]
+   },
+   "sha256": "81789e25033dace1592fa76820bd8df2c3b44bfc554fab26eff6de9019e04744"
+  },
+  "industry": {
+   "rows": 2647,
+   "size": 25836,
+   "columns": [
+    {
+     "name": "stock_id",
+     "type": "large_string"
+    },
+    {
+     "name": "industry",
+     "type": "large_string"
+    },
+    {
+     "name": "finmind_type",
+     "type": "large_string"
+    },
+    {
+     "name": "delisted",
+     "type": "bool"
+    },
+    {
+     "name": "is_financial",
+     "type": "bool"
+    },
+    {
+     "name": "source",
+     "type": "large_string"
+    }
+   ],
+   "ranges": {},
+   "sha256": "7173bab9ce6c50aa2e11db827a28114aadf26e5b9ab0bb75da76ad0cf74eaa3a"
+  }
+ }
 }
