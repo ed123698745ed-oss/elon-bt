@@ -1,0 +1,65 @@
+name: build-fin
+# 財報修正版建置（fin-20261107 退回後）：jobs/fin_build.txt 寫 tag=fin-YYYYMMDDrN。
+# 以 fin-20261107 的 financials.parquet 為原料：依原始科目名稱重新對應 → 恆等式回補 → 財報電子書回補（raw-fin-ebook）→ 白名單與測試；測試未過不發布。
+on:
+  push:
+    paths: ["jobs/fin_build.txt"]
+  workflow_dispatch:
+permissions: { contents: write }
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env: { GH_TOKEN: "${{ github.token }}" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install pandas pyarrow pytest pyyaml
+      - name: get inputs
+        run: |
+          gh release download fin-20261107 -p financials.parquet -D src
+          gh release download raw-fin-ebook -p p-ebook.tar.gz -p p-ebook.sha256
+          sha256sum -c p-ebook.sha256
+          tar xzf p-ebook.tar.gz
+          echo "EBOOK_COMPLETE=$([ -f raw_ebook/_complete ] && echo yes || echo no)" >> $GITHUB_ENV
+      - name: pass 1 (no ebook) → targets
+        run: EBOOK=/nonexistent SRC=src/financials.parquet OUT=pass1 python data_layer/fin_fix.py > pass1_log.txt
+      - name: parse ebook
+        run: |
+          PAGES=raw_ebook/pages.jsonl SRC=src/financials.parquet TARGETS=pass1/ebook_targets.csv OUT=ebook python data_layer/parse_fin_ebook.py | tee parse_log.txt
+          PAGES=raw_ebook/pages.jsonl SRC=src/financials.parquet TARGETS=data_seed/fin_ebook_audit.csv OUT=audit python data_layer/parse_fin_ebook.py | tee -a parse_log.txt
+      - name: build
+        run: EBOOK=ebook/fin_ebook.csv SRC=src/financials.parquet OUT=out python data_layer/fin_fix.py | tee build_log.txt
+      - name: audit identity rows against ebook
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          a = pd.read_csv("audit/fin_ebook.csv", dtype={"stock_id": str})
+          f = pd.read_parquet("out/financials.parquet")
+          f = f[f["type"].isin(["EquityAttributableToOwnersOfParent", "NoncontrollingInterests"]) & (f["dataset"] == "TaiwanStockFinancialStatements")]
+          m = a.merge(f[["stock_id", "date", "type", "value", "src"]], on=["stock_id", "date", "type"], suffixes=("_ebook", "_data"))
+          m["diff"] = m["value_data"] - m["value_ebook"]
+          m.to_csv("out/audit_identity_vs_ebook.csv", index=False)
+          print("抽核筆數", len(m), "差異>1000元", int((m["diff"].abs() > 1000).sum()))
+          PY
+      - name: tests
+        run: |
+          set +e; FIN_OUT=out python -m pytest -q -rA tests/test_fin_fix.py > test_output.txt 2>&1; echo "TEST_RC=$?" >> $GITHUB_ENV; tail -3 test_output.txt
+      - name: tests must pass
+        run: if [ "$TEST_RC" != "0" ]; then tail -40 test_output.txt; exit 1; fi
+      - name: publish
+        run: |
+          TAG=$(grep -o 'tag=[^ ]*' jobs/fin_build.txt | tail -1 | cut -d= -f2)
+          cp ebook/fin_ebook.csv ebook/ebook_unresolved.csv parse_log.txt build_log.txt test_output.txt out/
+          python - <<PY
+          import hashlib, json, os, pandas as pd
+          fp = "out/financials.parquet"
+          json.dump({"data_tag": "$TAG", "code_commit": os.environ["GITHUB_SHA"], "tests_exit_code": int(os.environ["TEST_RC"]),
+                     "source": "fin-20261107 financials.parquet", "source_sha256": hashlib.sha256(open("src/financials.parquet","rb").read()).hexdigest(),
+                     "ebook_complete": os.environ["EBOOK_COMPLETE"], "ebook_sha256": open("p-ebook.sha256").read().split()[0],
+                     "files": {"financials.parquet": {"sha256": hashlib.sha256(open(fp,"rb").read()).hexdigest(), "rows": int(pd.read_parquet(fp, columns=["stock_id"]).shape[0])}}},
+                    open("out/manifest_fin.json","w"), ensure_ascii=False, indent=1)
+          PY
+          rm -f out/backfill_rows.csv.tmp
+          gh release create "$TAG" out/* --prerelease --title "$TAG" --notes "財報修正版候選標籤（fin-20261107 退回後；Eve 驗收前不得供策略正式使用）。電子書下載完成：$EBOOK_COMPLETE"

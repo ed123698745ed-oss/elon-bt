@@ -42,7 +42,7 @@ REMAP = {
     (IS, "-", "費損"): "Expenses",
 }
 WL = os.path.join(ROOT, "data_catalog", "fin_origin_whitelist.csv")
-EBOOK = os.path.join(ROOT, "data_seed", "fin_ebook.csv")
+EBOOK = os.environ.get("EBOOK") or os.path.join(ROOT, "data_seed", "fin_ebook.csv")
 TOL = 0.5   # 元；重新對應後與既有列比對的容差
 
 
