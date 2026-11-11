@@ -59,7 +59,7 @@ def pages_with(pdf_path):
 def main():
     if prog.get("blocked_runs", 0) >= 3:
         print("已連續被擋 3 次，停止抓取等 Ed 決定"); return
-    todo = list(csv.DictReader(open(os.path.join(HERE, "data_seed", "fin_ebook_reports.csv"))))
+    todo = list(csv.DictReader(open(os.environ.get("REPORTS") or os.path.join(HERE, "data_seed", "fin_ebook_reports.csv"))))
     pj = open(os.path.join(OUT, "pages.jsonl"), "a")
     for r in todo:
         sid, y, s = r["stock_id"], r["roc_year"], r["seamon"]

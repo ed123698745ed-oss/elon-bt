@@ -1,0 +1,22 @@
+name: probe-ebook
+# 財報電子書格式試抓（少數幾份，供解析程式開發）
+on:
+  push:
+    paths: ["jobs/ebook_probe.csv"]
+  workflow_dispatch:
+permissions: { contents: write }
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env: { GH_TOKEN: "${{ github.token }}" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install pypdfium2
+      - run: OUT=probe_ebook INTERVAL=20 BUDGET_MIN=15 REPORTS=jobs/ebook_probe.csv python data_layer/fetch_fin_ebook.py || true
+      - run: |
+          tar czf probe-ebook.tar.gz probe_ebook
+          gh release view raw-fin-ebook >/dev/null 2>&1 || gh release create raw-fin-ebook --prerelease --title raw-fin-ebook --notes "財報電子書頁面文字與下載進度（財報補正用）"
+          gh release upload raw-fin-ebook probe-ebook.tar.gz --clobber
