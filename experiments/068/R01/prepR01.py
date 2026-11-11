@@ -17,12 +17,13 @@ P2 = os.environ.get("P2_TAG", "data-phase2-20261111c4")
 cal = load("calendar", tag=P1)
 IS_END = pd.Timestamp(cal["date"].max())   # 全期：資料最後一日
 dates = pd.DatetimeIndex(sorted(pd.to_datetime(cal["date"]).unique()))
-dates = dates[dates <= IS_END]
+DATA_START = pd.Timestamp("2011-06-01")   # 記憶體考量：只載入 2011-06 起（最長回看 180＋跳 40 日、20 日均額皆足）
+dates = dates[(dates >= DATA_START) & (dates <= IS_END)]
 T = len(dates)
 
 k = load("daily_k", tag=P1, columns=["date", "stock_id", "open", "high", "low", "close", "volume", "amount",
                              "no_trade", "prev_close", "ref_price", "limit_src", "limit_up", "limit_down", "jump_flag"])
-k = k[k["date"] <= IS_END]
+k = k[(k["date"] >= DATA_START) & (k["date"] <= IS_END)]
 sid = k["stock_id"]
 common = sid.str.fullmatch(r"[1-9]\d{3}") & ~sid.str.startswith("91")   # 普通股：四碼、非 0 開頭、非 91xx 存託憑證
 k = k[common & k["date"].isin(dates)].copy()

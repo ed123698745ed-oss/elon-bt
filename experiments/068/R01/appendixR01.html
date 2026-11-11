@@ -1,0 +1,885 @@
+<html><head><meta charset='utf-8'></head><body><h1>068 FinLab範例-60日動能ROE濾網｜V01／R01 程式附錄</h1><p>產生 V01／R01 回測結果實際使用的全部程式（共 884 行）。執行順序：P2_TAG=data-phase2-20261111c5 python prepR01.py → simR01.py card → simR01.py etest → statsR01.py → sensR01.py → sensstatsR01.py → excessR01.py → navR01.py → reportR01.py。共用統計函式 bt_stats 1.2（sha256 e99c85e9a9da8c593a727175cd5a0cc019d679552c75e8b1cef42fa62d5a20ee，selftest 全過）只註明版本；出表與自檢用 elon-backtest 技能 elon_tools.py；資料載入、報酬與交易日曆用 elon-bt framework.data／framework.core。選股與交易規則沿用快篩 quick_v3（sim068.py），simR01 只改資料檔名、樣本歸屬與敏感度參數。憑證不在程式內。</p><h3>prepR01.py</h3><pre style='font-family:Courier New;font-size:8pt'>&quot;&quot;&quot;068 正式策略包 R01：資料準備（全期間，樣本切分在統計時依凍結紀錄 freeze_068_R01.md 歸屬）。
+輸出 matsR01.npz 與 metaR01.pkl。第一期 data-20261110r72（D-068-20261111-1510-1）、第二期 c4（D-068-20261111-1510-2）。
+以下沿用快篩 prep068.py 規則，只改標籤與期間；另存敏感度用的近四季 ROE 比值與 10／20／40 日大盤均線。
+資料：elon-bt data-20261105r68（daily_k、calendar、listing_periods、corp_actions）；
+      fin-20261107（未送驗收）financials（FinMind 現行值，時點未驗證）；
+      data-phase2-20261110c3（待驗收）index_daily（加權指數）、fulldelivery（證交所變更交易名單）；
+      月營收：revinst-20261111 month_revenue（FinMind 現行值，未驗收；全期）。
+決策：D-068-20261104-1938-1、D-068-20261104-1947-1、D-068-20261111-0018-1～7。
+&quot;&quot;&quot;
+import glob, gzip, json, os, sys, pickle
+import numpy as np, pandas as pd
+sys.path.insert(0, &quot;/home/claude/elon-bt&quot;)
+from framework.data import load, data_tags_used
+
+P1 = os.environ.get(&quot;P1_TAG&quot;, &quot;data-20261110r72&quot;)
+P2 = os.environ.get(&quot;P2_TAG&quot;, &quot;data-phase2-20261111c4&quot;)
+cal = load(&quot;calendar&quot;, tag=P1)
+IS_END = pd.Timestamp(cal[&quot;date&quot;].max())   # 全期：資料最後一日
+dates = pd.DatetimeIndex(sorted(pd.to_datetime(cal[&quot;date&quot;]).unique()))
+DATA_START = pd.Timestamp(&quot;2011-06-01&quot;)   # 記憶體考量：只載入 2011-06 起（最長回看 180＋跳 40 日、20 日均額皆足）
+dates = dates[(dates &gt;= DATA_START) &amp; (dates &lt;= IS_END)]
+T = len(dates)
+
+k = load(&quot;daily_k&quot;, tag=P1, columns=[&quot;date&quot;, &quot;stock_id&quot;, &quot;open&quot;, &quot;high&quot;, &quot;low&quot;, &quot;close&quot;, &quot;volume&quot;, &quot;amount&quot;,
+                             &quot;no_trade&quot;, &quot;prev_close&quot;, &quot;ref_price&quot;, &quot;limit_src&quot;, &quot;limit_up&quot;, &quot;limit_down&quot;, &quot;jump_flag&quot;])
+k = k[(k[&quot;date&quot;] &gt;= DATA_START) &amp; (k[&quot;date&quot;] &lt;= IS_END)]
+sid = k[&quot;stock_id&quot;]
+common = sid.str.fullmatch(r&quot;[1-9]\d{3}&quot;) &amp; ~sid.str.startswith(&quot;91&quot;)   # 普通股：四碼、非 0 開頭、非 91xx 存託憑證
+k = k[common &amp; k[&quot;date&quot;].isin(dates)].copy()
+stocks = np.array(sorted(k[&quot;stock_id&quot;].unique()))
+N = len(stocks)
+di = pd.Series(np.arange(T), index=dates)
+si = pd.Series(np.arange(N), index=stocks)
+r = di[k[&quot;date&quot;]].to_numpy(); c = si[k[&quot;stock_id&quot;]].to_numpy()
+
+
+def mat(col, fill=np.nan, dtype=float):
+    m = np.full((T, N), fill, dtype=dtype)
+    m[r, c] = k[col].to_numpy(dtype=dtype)
+    return m
+
+
+present = np.zeros((T, N), bool); present[r, c] = True
+O, H, L, C = mat(&quot;open&quot;), mat(&quot;high&quot;), mat(&quot;low&quot;), mat(&quot;close&quot;)
+AMT = mat(&quot;amount&quot;, 0.0)
+notrade = np.ones((T, N), bool); notrade[r, c] = k[&quot;no_trade&quot;].fillna(True).to_numpy().astype(bool) | ~(k[&quot;volume&quot;].to_numpy() &gt; 0)
+LU, LD = mat(&quot;limit_up&quot;), mat(&quot;limit_down&quot;)
+ls = k[&quot;limit_src&quot;].fillna(&quot;&quot;).astype(str)
+badlim = np.zeros((T, N), bool); badlim[r, c] = (ls.str.startswith(&quot;待查&quot;) | (ls == &quot;缺參考價&quot;)).to_numpy()
+nolim = np.zeros((T, N), bool); nolim[r, c] = ls.str.startswith(&quot;無漲跌幅&quot;).to_numpy()
+JUMP = np.zeros((T, N), bool); JUMP[r, c] = k[&quot;jump_flag&quot;].fillna(False).to_numpy().astype(bool)
+PC, REF = mat(&quot;prev_close&quot;), mat(&quot;ref_price&quot;)
+# 時點一致調整因子（E-Test M1-ADJ）：參考價≠前收（公司行動日）時 f=ref/prev_close，累積 F；調整價＝收盤/F，只用當日以前資訊
+f = np.where(np.isfinite(REF) &amp; np.isfinite(PC) &amp; (PC &gt; 0) &amp; (np.abs(REF - PC) &gt; 1e-9), REF / PC, 1.0)
+# r68 在減資／面額變更恢復買賣日的 ref_price 仍是停止買賣前收盤（退回-69 ④，r72 才修正）：
+# 當日 daily_k 參考價＝前收、但 corp_actions 有換股比≠1 或現金時，改用 corp_actions 推得 f＝((前收−每股現金)÷換股比)÷前收
+ca0 = load(&quot;corp_actions&quot;, tag=P1)
+ca0 = ca0[ca0[&quot;stock_id&quot;].isin(stocks)].copy()
+ca0[&quot;date&quot;] = pd.to_datetime(ca0[&quot;ex_date&quot;])
+ca0 = ca0[ca0[&quot;date&quot;].isin(dates)]
+ca0[&quot;bad&quot;] = ca0[&quot;share_ratio&quot;].isna() | ca0[&quot;cash&quot;].isna()
+agg = ca0.groupby([&quot;stock_id&quot;, &quot;date&quot;]).agg(ratio=(&quot;share_ratio&quot;, lambda x: float(np.prod(x.fillna(1.0)))),
+                                            cash=(&quot;cash&quot;, lambda x: float(x.fillna(0.0).sum())), bad=(&quot;bad&quot;, &quot;any&quot;),
+                                            kinds=(&quot;kind&quot;, lambda x: &quot;、&quot;.join(x))).reset_index()
+F_FIX = []
+for row in agg.itertuples():
+    i, j = di[row.date], si[row.stock_id]
+    if row.bad or abs(f[i, j] - 1.0) &gt; 1e-12 or not (np.isfinite(PC[i, j]) and PC[i, j] &gt; 0):
+        continue
+    if abs(row.ratio - 1.0) &lt; 1e-12 and row.cash == 0:
+        continue
+    ff = ((PC[i, j] - row.cash) / row.ratio) / PC[i, j]
+    if np.isfinite(ff) and ff &gt; 0:
+        f[i, j] = ff
+        F_FIX.append((row.stock_id, row.date.date().isoformat(), row.kinds, row.ratio, row.cash, PC[i, j], ff))
+F = np.cumprod(f, axis=0)
+# 同一批減資恢復日的漲跌停價：r68 以停止買賣前收盤推算（錯），改以 corp_actions 推得的恢復參考價依規則推算（elon_tools.limit_prices）
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from elon_tools import limit_prices
+for sid_, dstr, _k, _r, _c, pc_, ff in F_FIX:
+    i, j = di[pd.Timestamp(dstr)], si[sid_]
+    up, dn = limit_prices(round(pc_ * ff, 2), dstr)
+    LU[i, j], LD[i, j] = up, dn
+    nolim[i, j] = False
+CT = np.where(present &amp; ~notrade, C, np.nan)        # 有成交日的收盤價（無成交＝無收盤價，D-068-…-0018-5）
+CADJ = CT / F
+
+# 掛牌（官方逐日市場別區段，listing_periods 唯一入口）
+lp = load(&quot;listing_periods&quot;, tag=P1)
+lp = lp[lp[&quot;market&quot;].isin([&quot;上市&quot;, &quot;上櫃&quot;]) &amp; lp[&quot;stock_id&quot;].isin(stocks)]
+listed = np.zeros((T, N), bool)
+for row in lp.itertuples():
+    a = dates.searchsorted(pd.Timestamp(row.start)); b = dates.searchsorted(pd.Timestamp(row.end), side=&quot;right&quot;)
+    if b &gt; a:
+        listed[a:b, si[row.stock_id]] = True
+
+# 證交所變更交易（全額交割）名單：2004-12-24 起，僅上市（上櫃全額交割名單資料層未含，列限制）
+fd = load(&quot;fulldelivery&quot;, allow_candidate=True, tag=P2)
+fd = fd[fd[&quot;code&quot;].isin(stocks)].copy()
+fd[&quot;date&quot;] = pd.to_datetime(fd[&quot;date&quot;])
+fd = fd[fd[&quot;date&quot;].isin(dates)]
+FULLD = np.zeros((T, N), bool)
+FULLD[di[fd[&quot;date&quot;]].to_numpy(), si[fd[&quot;code&quot;]].to_numpy()] = True
+
+# 加權指數 20 日均線
+ix = load(&quot;index_daily&quot;, allow_candidate=True, tag=P2)
+ix[&quot;date&quot;] = pd.to_datetime(ix[&quot;date&quot;]); ix = ix.set_index(&quot;date&quot;).reindex(dates)
+tc = ix[&quot;taiex_close&quot;]
+ma20 = tc.rolling(20, min_periods=20).mean()
+mkt_ok = (tc &gt;= ma20).to_numpy()
+mkt_has = (ma20.notna() &amp; tc.notna()).to_numpy()
+MKT = {}
+for w in (10, 20, 40):
+    ma = tc.rolling(w, min_periods=w).mean()
+    MKT[w] = ((tc &gt;= ma).to_numpy(), (ma.notna() &amp; tc.notna()).to_numpy())
+
+# 前 20 個市場交易日平均成交金額（含訊號日，無成交日計 0）
+AMT0 = np.where(present &amp; ~notrade, np.nan_to_num(AMT), 0.0)
+cs = np.cumsum(AMT0, axis=0)
+ADV20 = np.full((T, N), np.nan)
+ADV20[19:] = (cs[19:] - np.vstack([np.zeros((1, N)), cs[:-20]])) / 20
+
+# 換股日：每月最後一個市場交易日；雙週＝ISO 雙數週最後一個市場交易日（D-068-…-0018-3）
+ym = dates.year * 100 + dates.month
+rebal_m = np.r_[ym[1:] != ym[:-1], True]
+iso = dates.isocalendar()
+wk = (iso[&quot;year&quot;].astype(int) * 100 + iso[&quot;week&quot;].astype(int)).to_numpy()
+rebal_2w = np.r_[wk[1:] != wk[:-1], True] &amp; (iso[&quot;week&quot;].to_numpy().astype(int) % 2 == 0)
+rebal_m[-1] = rebal_2w[-1] = False     # 資料最後一日（樣本內切點）之後無次一交易日，不換股
+
+
+def avail_index(deadline):
+    &quot;&quot;&quot;法定期限（遇非交易日順延至次一交易日）之次一交易日起可用（D-068-…-0018-2）；回傳 dates 中的索引，超出回傳 T。&quot;&quot;&quot;
+    dl = dates.searchsorted(pd.Timestamp(deadline))       # 期限日或順延後的交易日
+    return dl + 1
+
+
+# 財報：歸屬母公司淨利（單季）與歸屬母公司權益（D-068-…-0018-4）
+fin = load(&quot;financials&quot;, allow_candidate=True)
+fin = fin[(fin[&quot;date&quot;] &gt;= &quot;2012-03-31&quot;) &amp; fin[&quot;stock_id&quot;].isin(stocks)]
+inc = fin[fin[&quot;dataset&quot;] == &quot;TaiwanStockFinancialStatements&quot;].pivot_table(index=[&quot;stock_id&quot;, &quot;date&quot;], columns=&quot;type&quot;, values=&quot;value&quot;, aggfunc=&quot;first&quot;)
+bs = fin[fin[&quot;dataset&quot;] == &quot;TaiwanStockBalanceSheet&quot;].pivot_table(index=[&quot;stock_id&quot;, &quot;date&quot;], columns=&quot;type&quot;, values=&quot;value&quot;, aggfunc=&quot;first&quot;)
+ni_par, ni_tot = inc.get(&quot;EquityAttributableToOwnersOfParent&quot;), inc.get(&quot;IncomeAfterTaxes&quot;)
+nci = inc.get(&quot;NoncontrollingInterests&quot;)
+# 無非控制權益拆分（FinMind 未列歸屬母公司欄、也未列非控制權益）時，本期淨利即歸屬母公司淨利
+no_split = ni_par.isna() &amp; (nci.isna() | (nci.fillna(0) == 0))
+NI = ni_par.where(ni_par.notna(), ni_tot.where(no_split))
+NI_src = pd.Series(np.where(ni_par.notna(), &quot;歸屬母公司&quot;, np.where(NI.notna(), &quot;本期淨利（無非控制權益拆分）&quot;, &quot;資料不足&quot;)), index=NI.index)
+eq_par, eq_tot = bs.get(&quot;EquityAttributableToOwnersOfParent&quot;), bs.get(&quot;Equity&quot;)
+nci_eq = bs.get(&quot;NoncontrollingInterests&quot;)
+EQ = eq_par.where(eq_par.notna(), eq_tot.where(eq_par.isna() if nci_eq is None else (eq_par.isna() &amp; (nci_eq.isna() | (nci_eq.fillna(0) == 0)))))
+EQ_src = pd.Series(np.where(eq_par.notna(), &quot;歸屬母公司&quot;, np.where(EQ.notna(), &quot;權益總額（無非控制權益拆分）&quot;, &quot;資料不足&quot;)), index=EQ.index)
+fq = pd.DataFrame({&quot;NI&quot;: NI, &quot;NI_src&quot;: NI_src}).join(pd.DataFrame({&quot;EQ&quot;: EQ, &quot;EQ_src&quot;: EQ_src}), how=&quot;outer&quot;).reset_index()
+fq[&quot;date&quot;] = pd.to_datetime(fq[&quot;date&quot;])
+fq = fq[fq[&quot;date&quot;].dt.year &gt;= 2013]           # IFRS 起（D-068-20261104-1947-1②）；2012 年 ROC GAAP 不用
+
+QEND = sorted(fq[&quot;date&quot;].unique())
+qpos = {d: n for n, d in enumerate(QEND)}
+
+
+def deadline_of(qe):
+    y, m = qe.year, qe.month
+    return {3: f&quot;{y}-05-15&quot;, 6: f&quot;{y}-08-14&quot;, 9: f&quot;{y}-11-14&quot;, 12: f&quot;{y + 1}-03-31&quot;}[m]
+
+
+NIq = np.full((len(QEND), N), np.nan); EQq = np.full((len(QEND), N), np.nan)
+q_i = fq[&quot;date&quot;].map(qpos).to_numpy(); s_i = si[fq[&quot;stock_id&quot;]].to_numpy()
+NIq[q_i, s_i] = fq[&quot;NI&quot;].to_numpy(float); EQq[q_i, s_i] = fq[&quot;EQ&quot;].to_numpy(float)
+# 近四季淨利合計（四季皆有才算）
+NI4 = np.full_like(NIq, np.nan)
+for n in range(3, len(QEND)):
+    blk = NIq[n - 3:n + 1]
+    # 四個季末必須連續（QEND 為完整季序列）
+    NI4[n] = np.where(np.isfinite(blk).all(axis=0), blk.sum(axis=0), np.nan)
+q_avail = np.array([avail_index(deadline_of(pd.Timestamp(q))) for q in QEND])
+# 每個交易日可用的最近一季（以期限判定，不看個別公司實際公告日）
+cur_q = np.full(T, -1)
+for n, a in enumerate(q_avail):
+    if a &lt; T:
+        cur_q[a:] = n
+ROE_Q_POS = np.zeros((T, N), bool); ROE4_GT8 = np.zeros((T, N), bool); FIN_MISS = np.zeros((T, N), bool)
+ROE4_MISS = np.zeros((T, N), bool); ROE4_VAL = np.full((T, N), np.nan, dtype=np.float32); HAS_FIN = np.zeros(T, bool); HAS_FIN4 = np.zeros(T, bool)
+for i in range(T):
+    n = cur_q[i]
+    if n &lt; 0:
+        continue
+    HAS_FIN[i] = True
+    ni, eq = NIq[n], EQq[n]
+    ok = np.isfinite(ni) &amp; np.isfinite(eq)
+    FIN_MISS[i] = ~ok
+    ROE_Q_POS[i] = ok &amp; (ni &gt; 0) &amp; (eq &gt; 0)
+    if n &gt;= 3:
+        HAS_FIN4[i] = True
+        n4 = NI4[n]
+        ok4 = np.isfinite(n4) &amp; np.isfinite(eq)
+        ROE4_MISS[i] = ~ok4
+        v = np.where(ok4 &amp; (eq &gt; 0), n4 / np.where(eq &gt; 0, eq, np.nan), np.nan)
+        ROE4_VAL[i] = v
+        ROE4_GT8[i] = ok4 &amp; (eq &gt; 0) &amp; (v &gt; 0.08)
+
+# 月營收：最近一個可用月份（次月 10 日期限之次一交易日起可用）的年增 &gt; 0
+REV_YOY_POS = np.zeros((T, N), bool); REV_MISS = np.ones((T, N), bool); rev_rows = []
+# 月營收：共用資料層 revinst-20261111 month_revenue.parquet（FinMind 現行值，未驗收；D-068-20261111-0055-1）
+# 全期載入；可用日仍依次月 10 日期限之次一交易日判定
+REV_PATH = &quot;/tmp/dl_revinst/month_revenue.parquet&quot;   # sha256 5fd58c5e8d29d434927ca6f00fc0a05d6e4300492c4988705954076e6fb38e7a
+rev = pd.read_parquet(REV_PATH)
+rev = rev[pd.to_datetime(rev[&quot;date&quot;]) &lt;= IS_END + pd.Timedelta(days=31)]   # 全期（可用日另依次月 10 日期限判定）
+rev = rev.rename(columns={&quot;revenue_year&quot;: &quot;y&quot;, &quot;revenue_month&quot;: &quot;m&quot;})[[&quot;stock_id&quot;, &quot;y&quot;, &quot;m&quot;, &quot;revenue&quot;, &quot;date&quot;]]
+rev[&quot;y&quot;] = rev[&quot;y&quot;].astype(int); rev[&quot;m&quot;] = rev[&quot;m&quot;].astype(int); rev[&quot;revenue&quot;] = rev[&quot;revenue&quot;].astype(float)
+files = [REV_PATH]
+rev = rev[rev[&quot;stock_id&quot;].isin(stocks)].drop_duplicates([&quot;stock_id&quot;, &quot;y&quot;, &quot;m&quot;], keep=&quot;last&quot;)
+months = pd.period_range(&quot;2011-01&quot;, (IS_END.to_period(&quot;M&quot;)), freq=&quot;M&quot;)
+mpos = {(p.year, p.month): n for n, p in enumerate(months)}
+REVm = np.full((len(months), N), np.nan)
+rk = [mpos.get((a, b), -1) for a, b in zip(rev[&quot;y&quot;], rev[&quot;m&quot;])]
+rv = rev.assign(_k=rk)
+rv = rv[rv[&quot;_k&quot;] &gt;= 0]
+if len(rv):
+    REVm[rv[&quot;_k&quot;].to_numpy(), si[rv[&quot;stock_id&quot;]].to_numpy()] = rv[&quot;revenue&quot;].to_numpy(float)
+m_avail = np.array([avail_index((p + 1).start_time + pd.Timedelta(days=9)) for p in months])
+cur_m = np.full(T, -1)
+for n, a in enumerate(m_avail):
+    if a &lt; T:
+        cur_m[a:] = n
+for i in range(T):
+    n = cur_m[i]
+    if n &lt; 12:
+        continue
+    a, b = REVm[n], REVm[n - 12]
+    okk = np.isfinite(a) &amp; np.isfinite(b) &amp; (b &gt; 0)
+    REV_MISS[i] = ~okk
+    REV_YOY_POS[i] = okk &amp; (a / np.where(b &gt; 0, b, np.nan) - 1 &gt; 0)
+
+ca = load(&quot;corp_actions&quot;, tag=P1)
+ca = ca[ca[&quot;stock_id&quot;].isin(stocks)].copy()
+
+np.savez_compressed(&quot;matsR01.npz&quot;, ROE4_VAL=ROE4_VAL, mkt10_ok=MKT[10][0], mkt10_has=MKT[10][1], mkt40_ok=MKT[40][0], mkt40_has=MKT[40][1], present=present, O=O, H=H, L=L, C=C, CT=CT, CADJ=CADJ, notrade=notrade,
+                    LU=LU, LD=LD, badlim=badlim, nolim=nolim, JUMP=JUMP, listed=listed, FULLD=FULLD,
+                    mkt_ok=mkt_ok, mkt_has=mkt_has, ADV20=ADV20, rebal_m=rebal_m, rebal_2w=rebal_2w, F=F,
+                    ROE_Q_POS=ROE_Q_POS, ROE4_GT8=ROE4_GT8, FIN_MISS=FIN_MISS, ROE4_MISS=ROE4_MISS, HAS_FIN=HAS_FIN,
+                    HAS_FIN4=HAS_FIN4, REV_YOY_POS=REV_YOY_POS, REV_MISS=REV_MISS, cur_q=cur_q, cur_m=cur_m)
+pickle.dump({&quot;dates&quot;: dates, &quot;stocks&quot;: stocks, &quot;ca&quot;: ca, &quot;tags&quot;: data_tags_used(), &quot;QEND&quot;: QEND, &quot;q_avail&quot;: q_avail,
+             &quot;months&quot;: months, &quot;m_avail&quot;: m_avail, &quot;rev_files&quot;: len(files), &quot;rev_rows&quot;: len(rev),
+             &quot;ni_src&quot;: NI_src.value_counts().to_dict(), &quot;eq_src&quot;: EQ_src.value_counts().to_dict(), &quot;F_FIX&quot;: F_FIX, &quot;P1&quot;: P1, &quot;P2&quot;: P2, &quot;END&quot;: IS_END},
+            open(&quot;metaR01.pkl&quot;, &quot;wb&quot;))
+print(T, N, rebal_m.sum(), rebal_2w.sum(), len(files), data_tags_used())
+</pre><h3>simR01.py</h3><pre style='font-family:Courier New;font-size:8pt'>&quot;&quot;&quot;068 正式策略包 R01：模擬（全期連續路徑；樣本歸屬依 freeze_068_R01.md 第 1 節）。
+一筆交易＝連續持有段（入選買進→落選賣出）；無停損（依原版）。
+換股日收盤後判斷，次一市場交易日開盤先賣後買；續選者續抱。
+&quot;&quot;&quot;
+import os, sys, pickle
+import numpy as np, pandas as pd
+sys.path.insert(0, &quot;/home/claude/elon-bt&quot;)
+from framework.core import Calendar, actions_from_table, trade_return
+
+M = dict(np.load(&quot;matsR01.npz&quot;))
+meta = pickle.load(open(&quot;metaR01.pkl&quot;, &quot;rb&quot;))
+dates, stocks, ca = meta[&quot;dates&quot;], meta[&quot;stocks&quot;], meta[&quot;ca&quot;]
+T, N = len(dates), len(stocks)
+cal = Calendar(dates.date)
+IS_END = pd.Timestamp(&quot;2022-06-30&quot;); OOS_START = pd.Timestamp(&quot;2022-10-01&quot;); DATA_END = dates[-1]
+SIG_START = pd.Timestamp(&quot;2013-05-16&quot;)   # 2013Q1（首份 IFRS 季報）期限 5/15 之次一交易日起可用（D-068-20261104-1947-1②、D-068-…-0018-2）
+ROE4_START = pd.Timestamp(&quot;2014-04-01&quot;)  # 2013 年報期限 3/31 之次一交易日（湊滿 4 季 IFRS；D-068-…-0018-4）
+TOL = 1e-12
+
+COMBOS = {   # 原版 M1、對照 M0、4.2 一次改一個參數族（策略卡）；E-Test 另列
+    &quot;M0&quot;:          dict(L=60, top=30, filt=None),
+    &quot;M1&quot;:          dict(L=60, top=30, filt=&quot;roe&quot;),
+    &quot;V-L20&quot;:       dict(L=20, top=30, filt=&quot;roe&quot;),
+    &quot;V-L120&quot;:      dict(L=120, top=30, filt=&quot;roe&quot;),
+    &quot;V-TOP10&quot;:     dict(L=60, top=10, filt=&quot;roe&quot;),
+    &quot;V-FILT1ST&quot;:   dict(L=60, top=30, filt=&quot;roe&quot;, filt_first=True),
+    &quot;V-ROE8&quot;:      dict(L=60, top=30, filt=&quot;roe4&quot;, start=ROE4_START),
+    &quot;V-REV&quot;:       dict(L=60, top=30, filt=&quot;rev&quot;),
+    &quot;V-LIQ0.5億&quot;:  dict(L=60, top=30, filt=&quot;roe&quot;, liq=5e7),
+    &quot;V-LIQ2億&quot;:    dict(L=60, top=30, filt=&quot;roe&quot;, liq=2e8),
+    &quot;V-2W&quot;:        dict(L=60, top=30, filt=&quot;roe&quot;, biweekly=True),
+    &quot;V-MKT&quot;:       dict(L=60, top=30, filt=&quot;roe&quot;, mkt=True),
+    &quot;V-MERGE&quot;:     dict(L=120, top=10, filt=&quot;roe&quot;, filt_first=True, biweekly=True),  # merge068.pick 依協定挑出：V-L120＋V-TOP10＋V-FILT1ST＋V-2W
+    &quot;M1-同期&quot;:     dict(L=60, top=30, filt=&quot;roe&quot;, start=ROE4_START),   # V-ROE8 同期間對照（D-068-…-0018-4）
+}
+ETESTS = {
+    &quot;E-M1-ADJ&quot;:    dict(L=60, top=30, filt=&quot;roe&quot;, adj=True),   # D-068-20261111-0018-7
+    &quot;E-BUF50&quot;:     dict(L=60, top=30, filt=&quot;roe&quot;, buffer=50),  # D-068-20261111-0949-1：已持有者排名在前 50 且 ROE&gt;0 就續抱
+    &quot;E-SKIP20&quot;:    dict(L=60, top=30, filt=&quot;roe&quot;, skip=20),    # D-068-20261111-0949-1：動能＝第 20 日前收盤÷第 80 日前收盤
+    &quot;E-STOP15&quot;:    dict(L=60, top=30, filt=&quot;roe&quot;, stop=0.15),  # D-068-20261111-0949-1：收盤跌破進場價 15%，次日開盤賣
+}
+FILT = {&quot;roe&quot;: &quot;ROE_Q_POS&quot;, &quot;roe4&quot;: &quot;ROE4_GT8&quot;, &quot;rev&quot;: &quot;REV_YOY_POS&quot;}
+
+
+def selection(i, p, held=()):
+    &quot;&quot;&quot;換股日 i 收盤後的入選名單（索引陣列）。buffer＞0 時，已持有者排名在前 buffer 名（且通過濾網）也保留。&quot;&quot;&quot;
+    L, sk = p[&quot;L&quot;], p.get(&quot;skip&quot;, 0)
+    if i - L - sk &lt; 0:
+        return np.array([], int)
+    X = M[&quot;CADJ&quot;] if p.get(&quot;adj&quot;) else M[&quot;CT&quot;]
+    a, b = X[i - sk], X[i - L - sk]
+    pool = M[&quot;listed&quot;][i] &amp; M[&quot;listed&quot;][i - L - sk] &amp; ~M[&quot;FULLD&quot;][i] &amp; np.isfinite(a) &amp; np.isfinite(b) &amp; (b &gt; 0)
+    if sk:
+        pool &amp;= np.isfinite(M[&quot;CT&quot;][i])          # 換股日本身須有成交（與原版同）
+    if p.get(&quot;liq&quot;):
+        pool &amp;= np.nan_to_num(M[&quot;ADV20&quot;][i]) &gt;= p[&quot;liq&quot;]
+    mom = np.where(pool, a / np.where(b &gt; 0, b, 1.0), -np.inf)
+    if p.get(&quot;filt&quot;) == &quot;roe4&quot; and p.get(&quot;roe4_thr&quot;, 0.08) != 0.08:
+        v = M[&quot;ROE4_VAL&quot;][i]
+        f = np.isfinite(v) &amp; (v &gt; p[&quot;roe4_thr&quot;])
+    else:
+        f = M[FILT[p[&quot;filt&quot;]]][i] if p.get(&quot;filt&quot;) else np.ones(N, bool)
+    if p.get(&quot;filt_first&quot;):
+        mom = np.where(f, mom, -np.inf)
+    cand = np.where(np.isfinite(mom))[0]
+    order = cand[np.lexsort((cand, -mom[cand]))]     # 動能由大到小，同值依代號
+    S = order[:p[&quot;top&quot;]]
+    if p.get(&quot;filt&quot;) and not p.get(&quot;filt_first&quot;):
+        S = S[f[S]]
+    if p.get(&quot;buffer&quot;) and len(held):
+        keep = order[:p[&quot;buffer&quot;]]
+        keep = keep[f[keep]] if p.get(&quot;filt&quot;) else keep
+        S = np.union1d(S, np.intersect1d(keep, np.array(sorted(held), int)))
+    return S
+
+
+def can_buy(i, j):
+    if not M[&quot;present&quot;][i, j] or M[&quot;notrade&quot;][i, j] or not np.isfinite(M[&quot;O&quot;][i, j]):
+        return False, &quot;停牌或無開盤成交&quot;
+    if M[&quot;badlim&quot;][i, j]:
+        return False, &quot;資料不足：限幅待查／缺參考價&quot;
+    if M[&quot;O&quot;][i, j] &lt;= 0:
+        return False, &quot;資料不足：開盤價缺漏&quot;
+    lu = M[&quot;LU&quot;][i, j]
+    if not M[&quot;nolim&quot;][i, j] and np.isfinite(lu) and M[&quot;O&quot;][i, j] &gt;= lu - 1e-9:
+        return False, &quot;開盤漲停&quot;
+    return True, &quot;&quot;
+
+
+def can_sell(i, j):
+    if not M[&quot;present&quot;][i, j] or M[&quot;notrade&quot;][i, j] or not np.isfinite(M[&quot;O&quot;][i, j]):
+        return False, &quot;停牌或無開盤成交&quot;
+    if M[&quot;badlim&quot;][i, j]:
+        return &quot;bad&quot;, &quot;資料不足：出場日限幅待查&quot;
+    if M[&quot;O&quot;][i, j] &lt;= 0:
+        return &quot;bad&quot;, &quot;資料不足：出場日開盤價缺漏&quot;
+    ld = M[&quot;LD&quot;][i, j]
+    if not M[&quot;nolim&quot;][i, j] and np.isfinite(ld) and M[&quot;O&quot;][i, j] &lt;= ld + 1e-9:
+        return False, &quot;開盤跌停&quot;
+    return True, &quot;&quot;
+
+
+def run(name, p):
+    rebal = M[&quot;rebal_2w&quot;] if p.get(&quot;biweekly&quot;) else M[&quot;rebal_m&quot;]
+    start = p.get(&quot;start&quot;, SIG_START)
+    hold, pend_buy, pend_sell = {}, {}, {}
+    rows, cancels, nsel = [], [], []
+    for i in range(T):
+        # 1) 開盤：先賣後買；待賣部位每個交易日都重試（防錯 C14）
+        for j in list(pend_sell):
+            ok, why = can_sell(i, j)
+            if ok:
+                h = hold.pop(j); info = pend_sell.pop(j)
+                rows.append(dict(combo=name, j=j, sig_i=h[&quot;sig_i&quot;], entry_i=h[&quot;entry_i&quot;], entry_px=h[&quot;entry_px&quot;],
+                                 exit_i=i, exit_px=M[&quot;O&quot;][i, j] if ok is True else np.nan, plan_exit_i=info[&quot;plan&quot;],
+                                 exit_reason=info[&quot;why&quot;], bad_exit=why if ok == &quot;bad&quot; else None))
+        for j, info in list(pend_buy.items()):
+            ok, why = can_buy(i, j)
+            if ok:
+                hold[j] = dict(entry_i=i, entry_px=M[&quot;O&quot;][i, j], sig_i=info[&quot;sig&quot;])
+            else:
+                cancels.append(dict(combo=name, j=j, sig_i=info[&quot;sig&quot;], i=i, why=why))
+        pend_buy = {}
+        # 1b) 停損（卡 4.3）：收盤（時點一致調整價）≤ 進場價×(1−停損) → 次一交易日開盤賣；下一換股日前不再買（新買進只在換股日）
+        if p.get(&quot;stop&quot;):
+            for j, h in hold.items():
+                if j in pend_sell or i &lt;= h[&quot;entry_i&quot;] - 1:
+                    continue
+                c = M[&quot;CT&quot;][i, j]
+                if not np.isfinite(c):
+                    continue
+                ratio = (c / M[&quot;F&quot;][i, j]) / (h[&quot;entry_px&quot;] / M[&quot;F&quot;][h[&quot;entry_i&quot;], j])
+                if ratio &lt;= 1 - p[&quot;stop&quot;] + 1e-12:
+                    pend_sell[j] = dict(plan=i + 1, why=f&quot;停損{int(p[&#x27;stop&#x27;]*100)}%&quot;)
+        # 2) 換股日收盤：決定名單
+        if rebal[i] and dates[i] &gt;= start:
+            S = selection(i, p, held=[j for j in hold if j not in pend_sell])
+            nsel.append((dates[i], len(S)))
+            Sset = set(S.tolist())
+            for j in list(hold):
+                if j not in Sset and j not in pend_sell:
+                    pend_sell[j] = dict(plan=i + 1, why=&quot;落選&quot;)
+            w = p.get(&quot;mkt_w&quot;, 20)
+            ok_k, has_k = (&quot;mkt_ok&quot;, &quot;mkt_has&quot;) if w == 20 else (f&quot;mkt{w}_ok&quot;, f&quot;mkt{w}_has&quot;)
+            allow_new = (not p.get(&quot;mkt&quot;)) or (bool(M[has_k][i]) and bool(M[ok_k][i]))
+            if allow_new:
+                for j in S:
+                    if j in hold or j in pend_sell:
+                        continue
+                    pend_buy[j] = dict(sig=i)
+    for j, h in hold.items():
+        rows.append(dict(combo=name, j=j, sig_i=h[&quot;sig_i&quot;], entry_i=h[&quot;entry_i&quot;], entry_px=h[&quot;entry_px&quot;],
+                         exit_i=None, exit_px=np.nan, plan_exit_i=pend_sell.get(j, {}).get(&quot;plan&quot;),
+                         exit_reason=&quot;跨越樣本內切點（2022-06-30 仍持有）&quot;))
+    return rows, cancels, nsel
+
+
+ACT = {}
+def acts(j):
+    if j not in ACT:
+        ACT[j] = actions_from_table(ca, stocks[j])
+    return ACT[j]
+
+
+def finalize(rows, is_etest):
+    out = []
+    last_listed_i = T - 1 - M[&quot;listed&quot;][::-1].argmax(axis=0)
+    for k, r in enumerate(rows):
+        j = r[&quot;j&quot;]; ent = dates[r[&quot;entry_i&quot;]]
+        rec = dict(trade_id=f&quot;{r[&#x27;combo&#x27;]}-{k+1:06d}&quot;, combo=r[&quot;combo&quot;], is_etest=is_etest, symbol=stocks[j],
+                   signal_date=dates[r[&quot;sig_i&quot;]].date().isoformat(),
+                   info_time=dates[r[&quot;sig_i&quot;]].strftime(&quot;%Y-%m-%d 14:30&quot;), entry_time=ent.strftime(&quot;%Y-%m-%d 09:00&quot;),
+                   entry_date=ent.date().isoformat(), entry_px=r[&quot;entry_px&quot;], exit_date=None, exit_px=r[&quot;exit_px&quot;],
+                   exit_reason=r[&quot;exit_reason&quot;], plan_exit_date=None, ret=np.nan, hold_days=np.nan,
+                   cluster=ent.date().isoformat(), sample=None, excluded_reason=None, ret_flags=None)
+        sig = dates[r[&quot;sig_i&quot;]]
+        if r[&quot;exit_i&quot;] is None:
+            if not M[&quot;listed&quot;][T - 1, j] and last_listed_i[j] &lt; T - 1:
+                rec[&quot;excluded_reason&quot;] = &quot;持有期間下市或停止掛牌，最終現金／權益未取得（缺口）&quot;
+            else:
+                rec[&quot;excluded_reason&quot;] = &quot;資料最後一日仍持有，未完成&quot;
+            rec[&quot;sample&quot;] = &quot;未完成&quot;
+            out.append(rec); continue
+        ex = dates[r[&quot;exit_i&quot;]]
+        # 樣本歸屬（freeze_068_R01.md 第 1 節）
+        if ex &lt;= IS_END:
+            rec[&quot;sample&quot;] = &quot;樣本內&quot;
+        elif sig &gt;= OOS_START:
+            rec[&quot;sample&quot;] = &quot;樣本外&quot;
+        else:
+            rec[&quot;sample&quot;] = &quot;隔離帶&quot;
+            rec[&quot;excluded_reason&quot;] = &quot;持有段與隔離帶（2022-07-01～09-30）重疊，不列入任一段&quot;
+            out.append(rec); continue
+        rec[&quot;exit_date&quot;] = ex.date().isoformat()
+        rec[&quot;plan_exit_date&quot;] = dates[min(r[&quot;plan_exit_i&quot;], T - 1)].date().isoformat()
+        a, b = r[&quot;entry_i&quot;], r[&quot;exit_i&quot;]
+        if r.get(&quot;bad_exit&quot;):
+            rec[&quot;excluded_reason&quot;] = r[&quot;bad_exit&quot;]
+        elif M[&quot;JUMP&quot;][a + 1:b + 1, j].any():
+            rec[&quot;excluded_reason&quot;] = &quot;持有期間有異常跳動（超出漲跌停且查無公司行動），列未完成&quot;
+        else:
+            al = acts(j)
+            bad = [x for x in al if &quot;資料不足&quot; in x.kind and ent.date() &lt; x.ex_date &lt;= ex.date()]
+            if bad:
+                rec[&quot;excluded_reason&quot;] = &quot;持有期間公司行動資料不足：&quot; + &quot;、&quot;.join(f&quot;{x.ex_date}{x.kind}&quot; for x in bad)
+            else:
+                tr = trade_return(&quot;long&quot;, r[&quot;entry_px&quot;], r[&quot;exit_px&quot;], ent, ex, al, &quot;open&quot;, &quot;open&quot;)
+                rec[&quot;ret&quot;] = tr.ret
+                rec[&quot;hold_days&quot;] = cal.hold_days(ent, ex)
+                rec[&quot;ret_flags&quot;] = &quot;；&quot;.join(tr.flags) or None
+        out.append(rec)
+    return out
+
+
+def run_all(combos, is_etest):
+    allr, allc, alln = [], [], {}
+    for name, p in combos.items():
+        rows, cancels, nsel = run(name, p)
+        fr = finalize(rows, is_etest)
+        allr += fr
+        for c in cancels:
+            c.update(symbol=stocks[c[&quot;j&quot;]], signal_date=dates[c[&quot;sig_i&quot;]].date().isoformat(), date=dates[c[&quot;i&quot;]].date().isoformat())
+        allc += cancels
+        alln[name] = nsel
+        df = pd.DataFrame(fr)
+        print(name, len(df), &quot;納入&quot;, int(df.excluded_reason.isna().sum()), &quot;取消&quot;, len(cancels), flush=True)
+    return pd.DataFrame(allr), pd.DataFrame(allc).drop(columns=[&quot;j&quot;, &quot;sig_i&quot;, &quot;i&quot;]), alln
+
+
+if __name__ == &quot;__main__&quot;:
+    which = sys.argv[1] if len(sys.argv) &gt; 1 else &quot;card&quot;
+    if which == &quot;card&quot;:
+        t, c, n = run_all(COMBOS, False)
+        t.to_pickle(&quot;tradesR01.pkl&quot;); c.to_pickle(&quot;cancelsR01.pkl&quot;); pickle.dump(n, open(&quot;nselR01.pkl&quot;, &quot;wb&quot;))
+    else:
+        t, c, n = run_all(ETESTS, True)
+        t.to_pickle(&quot;etradesR01.pkl&quot;); c.to_pickle(&quot;ecancelsR01.pkl&quot;); pickle.dump(n, open(&quot;enselR01.pkl&quot;, &quot;wb&quot;))
+</pre><h3>sensR01.py</h3><pre style='font-family:Courier New;font-size:8pt'>&quot;&quot;&quot;068 R01 敏感度測試：格點完全照 freeze_068_R01.md 第 5 節（看結果前寫定，不得增減）。
+每格沿用 simR01 的同一套規則，只改兩個參數；輸出 sensR01_trades.pkl（含 combo＝&quot;&lt;組合&gt;|&lt;參數一&gt;|&lt;參數二&gt;&quot;）。
+&quot;&quot;&quot;
+import pickle, sys
+import pandas as pd
+import simR01 as S
+
+LN = [(&quot;L&quot;, 40), (&quot;L&quot;, 60), (&quot;L&quot;, 90)]
+N3 = [(&quot;top&quot;, 20), (&quot;top&quot;, 30), (&quot;top&quot;, 45)]
+L_ = [40, 60, 90]
+GRIDS = {   # 組合 -&gt; (參數一名稱, 值列, 參數二名稱, 值列)
+    &quot;M0&quot;: (&quot;L&quot;, L_, &quot;top&quot;, [20, 30, 45]),
+    &quot;M1&quot;: (&quot;L&quot;, L_, &quot;top&quot;, [20, 30, 45]),
+    &quot;M1-同期&quot;: (&quot;L&quot;, L_, &quot;top&quot;, [20, 30, 45]),
+    &quot;V-FILT1ST&quot;: (&quot;L&quot;, L_, &quot;top&quot;, [20, 30, 45]),
+    &quot;V-REV&quot;: (&quot;L&quot;, L_, &quot;top&quot;, [20, 30, 45]),
+    &quot;V-2W&quot;: (&quot;L&quot;, L_, &quot;top&quot;, [20, 30, 45]),
+    &quot;E-M1-ADJ&quot;: (&quot;L&quot;, L_, &quot;top&quot;, [20, 30, 45]),
+    &quot;V-L20&quot;: (&quot;L&quot;, [10, 20, 40], &quot;top&quot;, [20, 30, 45]),
+    &quot;V-L120&quot;: (&quot;L&quot;, [80, 120, 180], &quot;top&quot;, [20, 30, 45]),
+    &quot;V-TOP10&quot;: (&quot;L&quot;, L_, &quot;top&quot;, [5, 10, 20]),
+    &quot;V-MERGE&quot;: (&quot;L&quot;, [80, 120, 180], &quot;top&quot;, [5, 10, 20]),
+    &quot;V-ROE8&quot;: (&quot;roe4_thr&quot;, [0.05, 0.08, 0.12], &quot;L&quot;, L_),
+    &quot;V-LIQ0.5億&quot;: (&quot;liq&quot;, [3e7, 5e7, 1e8], &quot;L&quot;, L_),
+    &quot;V-LIQ2億&quot;: (&quot;liq&quot;, [1e8, 2e8, 4e8], &quot;L&quot;, L_),
+    &quot;V-MKT&quot;: (&quot;mkt_w&quot;, [10, 20, 40], &quot;L&quot;, L_),
+    &quot;E-BUF50&quot;: (&quot;buffer&quot;, [40, 50, 75], &quot;L&quot;, L_),
+    &quot;E-SKIP20&quot;: (&quot;skip&quot;, [10, 20, 40], &quot;L&quot;, L_),
+    &quot;E-STOP15&quot;: (&quot;stop&quot;, [0.10, 0.15, 0.20], &quot;L&quot;, L_),
+}
+assert len(GRIDS) == 18 and all(len(a) == 3 and len(b) == 3 for _, a, _, b in GRIDS.values())
+
+
+def fmt(k, v):
+    return {&quot;roe4_thr&quot;: f&quot;ROE{int(round(v*100))}%&quot;, &quot;liq&quot;: f&quot;{v/1e8:g}億&quot;, &quot;mkt_w&quot;: f&quot;MA{v}&quot;, &quot;buffer&quot;: f&quot;前{v}&quot;,
+            &quot;skip&quot;: f&quot;跳{v}&quot;, &quot;stop&quot;: f&quot;停損{int(round(v*100))}%&quot;, &quot;L&quot;: f&quot;L{v}&quot;, &quot;top&quot;: f&quot;N{v}&quot;}[k]
+
+
+if __name__ == &quot;__main__&quot;:
+    base = {**S.COMBOS, **S.ETESTS}
+    rows, meta = [], []
+    for name, (k1, v1s, k2, v2s) in GRIDS.items():
+        for v1 in v1s:
+            for v2 in v2s:
+                p = dict(base[name]); p[k1] = v1; p[k2] = v2
+                cid = f&quot;{name}|{fmt(k1, v1)}|{fmt(k2, v2)}&quot;
+                r, _, _ = S.run(cid, p)
+                fr = S.finalize(r, name.startswith(&quot;E-&quot;))
+                rows += fr
+                is_center = (base[name].get(k1, {&quot;L&quot;: 60, &quot;top&quot;: 30, &quot;roe4_thr&quot;: 0.08, &quot;mkt_w&quot;: 20}.get(k1)) == v1 and
+                             base[name].get(k2, {&quot;L&quot;: 60, &quot;top&quot;: 30, &quot;roe4_thr&quot;: 0.08, &quot;mkt_w&quot;: 20}.get(k2)) == v2)
+                meta.append(dict(cid=cid, combo=name, p1=k1, v1=v1, p2=k2, v2=v2, center=is_center))
+        print(name, &quot;done&quot;, flush=True)
+    pd.DataFrame(rows).to_pickle(&quot;sensR01_trades.pkl&quot;)
+    pd.DataFrame(meta).to_pickle(&quot;sensR01_meta.pkl&quot;)
+</pre><h3>statsR01.py</h3><pre style='font-family:Courier New;font-size:8pt'>&quot;&quot;&quot;068 R01 統計：樣本內／樣本外／最新年度（樣本外中訊號日在 2026 年者）並列；bt_stats 1.2。
+Holm（聚合 p 為輸入）：家族一＝策略卡 10 組變體＋V-MERGE，家族二＝4 組 E-Test；樣本內、樣本外各自修正（freeze_068_R01.md 第 4 節）。
+&quot;&quot;&quot;
+import pandas as pd
+from elon_tools import load_bt_stats, ten_table, dd_table
+
+bt = load_bt_stats(&quot;bt_stats_v1.2.py&quot;)
+FAM1 = [&quot;V-L20&quot;, &quot;V-L120&quot;, &quot;V-TOP10&quot;, &quot;V-FILT1ST&quot;, &quot;V-ROE8&quot;, &quot;V-REV&quot;, &quot;V-LIQ0.5億&quot;, &quot;V-LIQ2億&quot;, &quot;V-2W&quot;, &quot;V-MKT&quot;, &quot;V-MERGE&quot;]
+
+
+def holm(s):
+    o = s.dropna().sort_values(); m = len(o); out = {}; run = 0.0
+    for k, (nm, v) in enumerate(o.items()):
+        run = max(run, min(1.0, (m - k) * v)); out[nm] = run
+    return pd.Series(out, dtype=float)
+
+
+def with_latest(t):
+    u = t[t[&quot;excluded_reason&quot;].isna() &amp; t[&quot;sample&quot;].isin([&quot;樣本內&quot;, &quot;樣本外&quot;])].copy()
+    lat = u[(u[&quot;sample&quot;] == &quot;樣本外&quot;) &amp; (pd.to_datetime(u[&quot;signal_date&quot;]).dt.year == 2026)].copy()
+    lat[&quot;sample&quot;] = &quot;最新年度&quot;
+    return pd.concat([u, lat], ignore_index=True)
+
+
+def tables(t, family):
+    u = with_latest(t)
+    order = list(dict.fromkeys(t.combo))
+    tt = ten_table(u, bt, by=(&quot;combo&quot;, &quot;sample&quot;), cluster_unit=&quot;進場日&quot;)
+    tt[[&quot;combo&quot;, &quot;sample&quot;]] = tt[&quot;combo／sample&quot;].str.split(&quot;｜&quot;, expand=True)
+    dd = dd_table(u, bt, by=(&quot;combo&quot;, &quot;sample&quot;))
+    dd[[&quot;combo&quot;, &quot;sample&quot;]] = dd[&quot;combo／sample&quot;].str.split(&quot;｜&quot;, expand=True)
+    tt[&quot;Holm聚合p&quot;] = float(&quot;nan&quot;)
+    for smp in (&quot;樣本內&quot;, &quot;樣本外&quot;):
+        sub = tt[(tt[&quot;sample&quot;] == smp) &amp; tt[&quot;combo&quot;].isin(family)].set_index(&quot;combo&quot;)[&quot;聚合p&quot;]
+        h = holm(sub)
+        m = (tt[&quot;sample&quot;] == smp) &amp; tt[&quot;combo&quot;].isin(h.index)
+        tt.loc[m, &quot;Holm聚合p&quot;] = tt.loc[m, &quot;combo&quot;].map(h)
+    key = {c: i for i, c in enumerate(order)}; sk = {&quot;樣本內&quot;: 0, &quot;樣本外&quot;: 1, &quot;最新年度&quot;: 2}
+    tt = tt.sort_values(by=[&quot;combo&quot;, &quot;sample&quot;], key=lambda s: s.map(key) if s.name == &quot;combo&quot; else s.map(sk)).reset_index(drop=True)
+    dd = dd.sort_values(by=[&quot;combo&quot;, &quot;sample&quot;], key=lambda s: s.map(key) if s.name == &quot;combo&quot; else s.map(sk)).reset_index(drop=True)
+    return tt, dd
+
+
+if __name__ == &quot;__main__&quot;:
+    card = pd.read_pickle(&quot;tradesR01.pkl&quot;); et = pd.read_pickle(&quot;etradesR01.pkl&quot;)
+    tt, dd = tables(card, FAM1); ett, edd = tables(et, list(et.combo.unique()))
+    for n, x in ((&quot;R01_card_ten&quot;, tt), (&quot;R01_card_dd&quot;, dd), (&quot;R01_et_ten&quot;, ett), (&quot;R01_et_dd&quot;, edd)):
+        x.to_pickle(n + &quot;.pkl&quot;)
+    pd.set_option(&quot;display.width&quot;, 300); pd.set_option(&quot;display.max_columns&quot;, 30)
+    cols = [&quot;combo&quot;, &quot;sample&quot;, &quot;樣本數&quot;, &quot;平均報酬&quot;, &quot;平均持有交易日數&quot;, &quot;單利年化&quot;, &quot;勝率&quot;, &quot;賠率R&quot;, &quot;凱利&quot;, &quot;標準差&quot;, &quot;t值&quot;, &quot;雙尾p&quot;, &quot;聚合單位數&quot;, &quot;聚合p&quot;, &quot;Holm聚合p&quot;]
+    print(pd.concat([tt, ett])[cols].to_string())
+    print(pd.concat([dd, edd])[[&quot;combo&quot;, &quot;sample&quot;, &quot;最大回撤&quot;, &quot;最差三次回撤平均&quot;, &quot;最長回撤期筆數&quot;, &quot;最長回撤期日曆日&quot;, &quot;最長回撤期未回復&quot;, &quot;需註記&quot;]].to_string())
+</pre><h3>sensstatsR01.py</h3><pre style='font-family:Courier New;font-size:8pt'>&quot;&quot;&quot;068 R01 敏感度統計與判讀（freeze_068_R01.md 第 5 節）。&quot;&quot;&quot;
+import pandas as pd
+from elon_tools import load_bt_stats, ten_table
+
+bt = load_bt_stats(&quot;bt_stats_v1.2.py&quot;)
+t = pd.read_pickle(&quot;sensR01_trades.pkl&quot;); meta = pd.read_pickle(&quot;sensR01_meta.pkl&quot;)
+u = t[t[&quot;excluded_reason&quot;].isna() &amp; t[&quot;sample&quot;].isin([&quot;樣本內&quot;, &quot;樣本外&quot;])].copy()
+rows = []
+for et in (False, True):
+    g = u[u[&quot;is_etest&quot;] == et]
+    tt = ten_table(g, bt, by=(&quot;combo&quot;, &quot;sample&quot;), cluster_unit=&quot;進場日&quot;)
+    tt[[&quot;cid&quot;, &quot;sample&quot;]] = tt[&quot;combo／sample&quot;].str.split(&quot;｜(?=樣本)&quot;, regex=True, expand=True)
+    rows.append(tt)
+S = pd.concat(rows, ignore_index=True).merge(meta, on=&quot;cid&quot;)
+S.to_pickle(&quot;sensR01_stats.pkl&quot;)
+
+# 中心格與主結果一致性檢查
+main = pd.concat([pd.read_pickle(&quot;R01_card_ten.pkl&quot;), pd.read_pickle(&quot;R01_et_ten.pkl&quot;)])
+chk = S[S.center].merge(main, left_on=[&quot;combo&quot;, &quot;sample&quot;], right_on=[&quot;combo&quot;, &quot;sample&quot;], suffixes=(&quot;_s&quot;, &quot;_m&quot;))
+bad = chk[(chk[&quot;樣本數_s&quot;] != chk[&quot;樣本數_m&quot;]) | ((chk[&quot;平均報酬_s&quot;] - chk[&quot;平均報酬_m&quot;]).abs() &gt; 1e-12)]
+print(&quot;center cells&quot;, len(chk), &quot;mismatch&quot;, len(bad))
+
+out = []
+for name, g in S.groupby(&quot;combo&quot;, sort=False):
+    i = g[g[&quot;sample&quot;] == &quot;樣本內&quot;]; o = g[g[&quot;sample&quot;] == &quot;樣本外&quot;]
+    same_dir = int(((i.set_index(&quot;cid&quot;)[&quot;平均報酬&quot;] &gt; 0) == (o.set_index(&quot;cid&quot;)[&quot;平均報酬&quot;] &gt; 0)).sum())
+    out.append(dict(combo=name, 格數=len(i), 樣本內正報酬格=int((i[&quot;平均報酬&quot;] &gt; 0).sum()), 樣本內聚合p顯著格=int((i[&quot;聚合p&quot;] &lt; 0.05).sum()),
+                    樣本外正報酬格=int((o[&quot;平均報酬&quot;] &gt; 0).sum()), 樣本外聚合p顯著格=int((o[&quot;聚合p&quot;] &lt; 0.05).sum()), 內外同方向格=same_dir,
+                    判讀=&quot;穩健&quot; if ((i[&quot;聚合p&quot;] &lt; 0.05).sum() &gt;= 5 and (o[&quot;聚合p&quot;] &lt; 0.05).sum() &gt;= 5 and same_dir == 9) else
+                         (&quot;樣本內穩健、樣本外未顯著&quot; if (i[&quot;聚合p&quot;] &lt; 0.05).sum() &gt;= 5 and (o[&quot;平均報酬&quot;] &gt; 0).sum() &gt;= 5 else &quot;不穩健／尖峰&quot;)))
+J = pd.DataFrame(out); J.to_pickle(&quot;sensR01_judge.pkl&quot;)
+pd.set_option(&quot;display.width&quot;, 250)
+print(J.to_string())
+</pre><h3>excessR01.py</h3><pre style='font-family:Courier New;font-size:8pt'>&quot;&quot;&quot;068 R01 描述性：相對加權報酬指數的近似超額報酬（只供判讀，不是策略卡指標）。
+基準＝taiex_tri_close（c5），區間取進場日前一交易日收盤→出場日前一交易日收盤（個股為開盤進出，指數無開盤報酬指數，故為近似超額，防錯 C4）。
+&quot;&quot;&quot;
+import sys, pickle
+import numpy as np, pandas as pd
+sys.path.insert(0, &quot;/home/claude/elon-bt&quot;)
+from framework.data import load
+from elon_tools import load_bt_stats, ten_table
+
+bt = load_bt_stats(&quot;bt_stats_v1.2.py&quot;)
+ix = load(&quot;index_daily&quot;, tag=&quot;data-phase2-20261111c5&quot;); ix[&quot;date&quot;] = pd.to_datetime(ix[&quot;date&quot;])
+tri = ix.set_index(&quot;date&quot;)[&quot;taiex_tri_close&quot;].dropna()
+d = tri.index
+
+
+def prev_close(day):
+    k = d.searchsorted(pd.Timestamp(day)) - 1
+    return tri.iloc[k]
+
+
+rows = []
+for f in (&quot;tradesR01.pkl&quot;, &quot;etradesR01.pkl&quot;):
+    t = pd.read_pickle(f)
+    u = t[t[&quot;excluded_reason&quot;].isna() &amp; t[&quot;sample&quot;].isin([&quot;樣本內&quot;, &quot;樣本外&quot;])].copy()
+    u[&quot;bench&quot;] = [prev_close(b) / prev_close(a) - 1 for a, b in zip(u.entry_date, u.exit_date)]
+    u[&quot;ret_raw&quot;] = u[&quot;ret&quot;]; u[&quot;ret&quot;] = u[&quot;ret_raw&quot;] - u[&quot;bench&quot;]
+    tt = ten_table(u, bt, by=(&quot;combo&quot;, &quot;sample&quot;), cluster_unit=&quot;進場日&quot;)
+    tt[&quot;基準平均&quot;] = u.groupby([&quot;combo&quot;, &quot;sample&quot;], sort=False)[&quot;bench&quot;].mean().values
+    rows.append(tt)
+X = pd.concat(rows, ignore_index=True)
+X.to_pickle(&quot;R01_excess.pkl&quot;)
+pd.set_option(&quot;display.width&quot;, 250)
+print(X[[&quot;combo／sample&quot;, &quot;樣本數&quot;, &quot;平均報酬&quot;, &quot;基準平均&quot;, &quot;勝率&quot;, &quot;t值&quot;, &quot;聚合p&quot;]].to_string())
+</pre><h3>navR01.py</h3><pre style='font-family:Courier New;font-size:8pt'>&quot;&quot;&quot;068 快篩：描述性等權組合淨值（只供與 FinLab 組合型報表對照，不取代十項統計）。
+做法同 066 nav：換股執行日開盤把持股調回等權（單檔上限＝1／選股檔數上限，餘額留現金）；其餘日子各部位隨價格漂移；
+開盤取消與落選賣出的資金留現金到下次換股。價格用時點一致調整價（收盤/F、開盤/F；比例調整，隱含股利再投入）。
+範圍：2013-05-16～2022-06-30（樣本內）；持有期間下市缺口的部位以最後收盤價轉現金（只影響本描述表）。
+&quot;&quot;&quot;
+import pickle
+import numpy as np, pandas as pd
+
+M = dict(np.load(&quot;matsR01.npz&quot;)); meta = pickle.load(open(&quot;metaR01.pkl&quot;, &quot;rb&quot;))
+dates, stocks = meta[&quot;dates&quot;], meta[&quot;stocks&quot;]
+T = len(dates)
+OA, CA = M[&quot;O&quot;] / M[&quot;F&quot;], M[&quot;C&quot;] / M[&quot;F&quot;]
+sidx = {s: k for k, s in enumerate(stocks)}
+di = {d.date().isoformat(): k for k, d in enumerate(dates)}
+
+
+def nav(t, combo, top=30, biweekly=False, start=&quot;2013-05-16&quot;, end=None):
+    g = t[t.combo == combo]
+    ent, ex = {}, {}
+    for r in g.itertuples():
+        j = sidx[r.symbol]; a = di[r.entry_date]
+        ent.setdefault(a, []).append((r.trade_id, j))
+        if isinstance(r.exit_date, str):
+            ex.setdefault(di[r.exit_date], []).append(r.trade_id)
+    reb = M[&quot;rebal_2w&quot;] if biweekly else M[&quot;rebal_m&quot;]
+    reb_exec = set((np.where(reb)[0] + 1).tolist())
+    s0 = dates.searchsorted(pd.Timestamp(start))
+    pos, cash, navs, turn, nh = {}, 1.0, [], 0.0, []
+    e1 = T if end is None else dates.searchsorted(pd.Timestamp(end), side=&quot;right&quot;)
+    for i in range(s0, e1):
+        for tid, p in pos.items():
+            o = OA[i, p[0]]
+            if np.isfinite(o) and o &gt; 0 and np.isfinite(p[2]) and p[2] &gt; 0:
+                p[1] *= o / p[2]; p[2] = o
+        for tid in ex.get(i, []):
+            if tid in pos:
+                cash += pos[tid][1]; turn += pos[tid][1]; del pos[tid]
+        newp = ent.get(i, [])
+        for tid, j in newp:
+            pos[tid] = [j, 0.0, OA[i, j]]
+        total = cash + sum(p[1] for p in pos.values())
+        if (i in reb_exec or newp) and pos:
+            w = total / max(len(pos), 1)
+            w = min(w, total / top)
+            for p in pos.values():
+                turn += abs(w - p[1]); p[1] = w
+            cash = total - w * len(pos)
+        for tid, p in pos.items():
+            c = CA[i, p[0]]
+            if np.isfinite(c) and c &gt; 0 and np.isfinite(p[2]) and p[2] &gt; 0:
+                p[1] *= c / p[2]; p[2] = c
+        navs.append(cash + sum(p[1] for p in pos.values())); nh.append(len(pos))
+    s = pd.Series(navs, index=dates[s0:e1])
+    yrs = (s.index[-1] - s.index[0]).days / 365.25
+    return dict(combo=combo, 年化報酬=s.iloc[-1] ** (1 / yrs) - 1, 最大回撤=(s / s.cummax() - 1).min(),
+                平均持股數=float(np.mean(nh)), 年換手率=turn / 2 / yrs / float(s.mean()), 期末淨值=s.iloc[-1]), s
+
+
+if __name__ == &quot;__main__&quot;:
+    import simR01 as S
+    res, curves = [], {}
+    for f, combos in ((&quot;tradesR01.pkl&quot;, S.COMBOS), (&quot;etradesR01.pkl&quot;, S.ETESTS)):
+        try:
+            t = pd.read_pickle(f)
+        except FileNotFoundError:
+            continue
+        for c, p in combos.items():
+            if c not in set(t.combo):
+                continue
+            st = p.get(&quot;start&quot;, S.SIG_START)
+            for seg, a, b in ((&quot;樣本內&quot;, str(st.date()), &quot;2022-06-30&quot;), (&quot;樣本外&quot;, &quot;2022-10-03&quot;, None)):
+                # 樣本外段從 2022-10-03 起只計 10 月起新進場的部位（與凍結紀錄的歸屬一致）
+                tt = t[(t.combo == c) &amp; ((t.signal_date &gt;= &quot;2022-10-01&quot;) if seg == &quot;樣本外&quot; else (t.signal_date &lt;= &quot;2022-06-30&quot;))]
+                r, s = nav(tt, c, top=p[&quot;top&quot;], biweekly=bool(p.get(&quot;biweekly&quot;)), start=a, end=b)
+                r[&quot;段&quot;] = seg; res.append(r); print(r, flush=True)
+    pd.DataFrame(res).to_pickle(&quot;navR01.pkl&quot;)
+</pre><h3>reportR01.py</h3><pre style='font-family:Courier New;font-size:8pt'>&quot;&quot;&quot;068 V01／R01 回測結果（HTML → Google 文件）。數字一律取自未四捨五入的結果檔。&quot;&quot;&quot;
+import html, math, pickle
+import pandas as pd
+
+ten = pd.concat([pd.read_pickle(&quot;R01_card_ten.pkl&quot;), pd.read_pickle(&quot;R01_et_ten.pkl&quot;)], ignore_index=True)
+dd = pd.concat([pd.read_pickle(&quot;R01_card_dd.pkl&quot;), pd.read_pickle(&quot;R01_et_dd.pkl&quot;)], ignore_index=True)
+ex = pd.read_pickle(&quot;R01_excess.pkl&quot;)
+nav = pd.read_pickle(&quot;navR01.pkl&quot;)
+sj = pd.read_pickle(&quot;sensR01_judge.pkl&quot;); ss = pd.read_pickle(&quot;sensR01_stats.pkl&quot;)
+meta = pickle.load(open(&quot;metaR01.pkl&quot;, &quot;rb&quot;))
+q = pd.read_pickle(&quot;archive_v1/card_ten.pkl&quot;)   # 快篩 r68 樣本內（v1；V-REV、V-MERGE 取 quick_v3）
+q3 = pd.read_pickle(&quot;card_ten.pkl&quot;)
+qe = pd.read_pickle(&quot;et_ten.pkl&quot;)
+tr = pd.concat([pd.read_pickle(&quot;tradesR01.pkl&quot;), pd.read_pickle(&quot;etradesR01.pkl&quot;)], ignore_index=True)
+
+NAME = {&quot;M0&quot;: &quot;M0 對照（不加 ROE）&quot;, &quot;M1&quot;: &quot;M1 原版&quot;, &quot;V-L20&quot;: &quot;回看 20 日&quot;, &quot;V-L120&quot;: &quot;回看 120 日&quot;, &quot;V-TOP10&quot;: &quot;選 10 檔&quot;,
+        &quot;V-FILT1ST&quot;: &quot;先濾 ROE 再取前 30&quot;, &quot;V-ROE8&quot;: &quot;近四季 ROE&gt;8%&quot;, &quot;V-REV&quot;: &quot;月營收年增&gt;0 取代 ROE&gt;0&quot;,
+        &quot;V-LIQ0.5億&quot;: &quot;20 日均額 ≥5,000 萬&quot;, &quot;V-LIQ2億&quot;: &quot;20 日均額 ≥2 億&quot;, &quot;V-2W&quot;: &quot;雙週換股&quot;, &quot;V-MKT&quot;: &quot;大盤 20MA 濾網&quot;,
+        &quot;V-MERGE&quot;: &quot;合併組（120日＋10檔＋先濾＋雙週）&quot;, &quot;M1-同期&quot;: &quot;M1（2014-04 起，V-ROE8 對照）&quot;,
+        &quot;E-M1-ADJ&quot;: &quot;E-Test：還原價算動能&quot;, &quot;E-BUF50&quot;: &quot;E-Test：持股緩衝（前 50 續抱）&quot;, &quot;E-SKIP20&quot;: &quot;E-Test：跳過最近 1 個月&quot;, &quot;E-STOP15&quot;: &quot;E-Test：停損 15%&quot;}
+CARD = [&quot;M0&quot;, &quot;M1&quot;, &quot;M1-同期&quot;, &quot;V-L20&quot;, &quot;V-L120&quot;, &quot;V-TOP10&quot;, &quot;V-FILT1ST&quot;, &quot;V-ROE8&quot;, &quot;V-REV&quot;, &quot;V-LIQ0.5億&quot;, &quot;V-LIQ2億&quot;, &quot;V-2W&quot;, &quot;V-MKT&quot;, &quot;V-MERGE&quot;]
+ET = [&quot;E-M1-ADJ&quot;, &quot;E-BUF50&quot;, &quot;E-SKIP20&quot;, &quot;E-STOP15&quot;]
+
+
+def isna(v):
+    return v is None or (isinstance(v, float) and math.isnan(v))
+
+
+def pct(v, d=2):
+    return &quot;N/A&quot; if isna(v) else f&quot;{v*100:.{d}f}%&quot;
+
+
+def num(v, f=&quot;{:.3f}&quot;):
+    return &quot;N/A&quot; if isna(v) else f.format(v)
+
+
+def pv(v):
+    return &quot;—&quot; if isna(v) else (f&quot;{v:.1e}&quot; if v &lt; 0.001 else f&quot;{v:.4f}&quot;)
+
+
+def table(head, rows):
+    h = &quot;&quot;.join(f&quot;&lt;th&gt;{html.escape(str(x))}&lt;/th&gt;&quot; for x in head)
+    b = &quot;&quot;.join(&quot;&lt;tr&gt;&quot; + &quot;&quot;.join(f&quot;&lt;td&gt;{html.escape(str(c))}&lt;/td&gt;&quot; for c in r) + &quot;&lt;/tr&gt;&quot; for r in rows)
+    return f&quot;&lt;table border=&#x27;1&#x27; cellpadding=&#x27;2&#x27; style=&#x27;border-collapse:collapse;font-size:8pt&#x27;&gt;&lt;tr&gt;{h}&lt;/tr&gt;{b}&lt;/table&gt;&quot;
+
+
+H10 = [&quot;組合&quot;, &quot;段&quot;, &quot;①樣本數&quot;, &quot;②平均報酬&quot;, &quot;③平均持有交易日數&quot;, &quot;④單利年化&quot;, &quot;⑤勝率&quot;, &quot;⑥賠率R&quot;, &quot;⑦凱利&quot;, &quot;⑧標準差&quot;, &quot;⑨t值&quot;, &quot;⑩雙尾p&quot;,
+       &quot;聚合單位數&quot;, &quot;聚合p&quot;, &quot;Holm聚合p&quot;]
+
+
+def ten_rows(cs):
+    out = []
+    for c in cs:
+        for r in ten[ten.combo == c].itertuples():
+            na = f&quot;（N/A：{r._19}）&quot; if False else &quot;&quot;
+            out.append([c, r.sample, f&quot;{int(r.樣本數):,}&quot;, pct(r.平均報酬), num(r.平均持有交易日數, &quot;{:.1f}&quot;), pct(r.單利年化, 1), pct(r.勝率, 1),
+                        num(r.賠率R, &quot;{:.2f}&quot;), num(r.凱利, &quot;{:.3f}&quot;), pct(r.標準差, 1), num(r.t值, &quot;{:.2f}&quot;), pv(r.雙尾p), int(r.聚合單位數), pv(r.聚合p), pv(r.Holm聚合p)])
+    return out
+
+
+def dd_rows(cs):
+    out = []
+    for c in cs:
+        for r in dd[dd.combo == c].itertuples():
+            lab = f&quot;{int(r.最長回撤期筆數):,} 筆（{int(r.最長回撤期日曆日):,} 天）&quot; + (&quot;，未回復&quot; if r.最長回撤期未回復 else &quot;&quot;)
+            if r.需註記:
+                lab += f&quot;［＝{int(r.最長回撤期聚合單位數)} 個進場日］&quot;
+            out.append([c, r.sample, pct(r.最大回撤, 1), pct(r.最差三次回撤平均, 1), lab])
+    return out
+
+
+T = ten.set_index([&quot;combo&quot;, &quot;sample&quot;])
+def g(c, s, k):
+    return T.loc[(c, s), k]
+
+oos_ok = [c for c in CARD + ET if c != &quot;M1-同期&quot; and g(c, &quot;樣本外&quot;, &quot;平均報酬&quot;) &gt; 0 and g(c, &quot;樣本外&quot;, &quot;聚合p&quot;) &lt; 0.05]
+oos_pos = [c for c in CARD + ET if c != &quot;M1-同期&quot; and g(c, &quot;樣本外&quot;, &quot;平均報酬&quot;) &gt; 0]
+n_oos_units = int(g(&quot;M1&quot;, &quot;樣本外&quot;, &quot;聚合單位數&quot;))
+
+summary = f&quot;&quot;&quot;
+&lt;p&gt;&lt;b&gt;① 結果：&lt;/b&gt;18 組的樣本外（2022-10～2026-11，{n_oos_units} 個換股月）平均報酬全部為正（例 M1 {pct(g(&#x27;M1&#x27;,&#x27;樣本外&#x27;,&#x27;平均報酬&#x27;))}、E-SKIP20 {pct(g(&#x27;E-SKIP20&#x27;,&#x27;樣本外&#x27;,&#x27;平均報酬&#x27;))}），但依凍結的判讀標準（樣本外聚合 p&amp;lt;0.05），只有 V-L20 達標（聚合 p {pv(g(&#x27;V-L20&#x27;,&#x27;樣本外&#x27;,&#x27;聚合p&#x27;))}，Holm 後 {pv(g(&#x27;V-L20&#x27;,&#x27;樣本外&#x27;,&#x27;Holm聚合p&#x27;))}），且其敏感度 9 格中僅 3 格樣本外顯著，屬尖峰。V-REV 敏感度最穩（樣本外 5／9 格顯著），但現行參數樣本外聚合 p {pv(g(&#x27;V-REV&#x27;,&#x27;樣本外&#x27;,&#x27;聚合p&#x27;))} 未達標。描述性比較：樣本外期間加權報酬指數同期平均約 +4.8%／筆，18 組相對大盤的近似超額報酬全部不顯著、多數為負；等權組合年化（M1 約 14%）落後加權指數同期（約 34%）。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;② 影響：&lt;/b&gt;本次回測沒有值得執行的候選組合。樣本內的強勢主要來自市場本身（樣本內超額報酬也多不顯著），樣本外的正報酬是 2022-10 起的多頭行情帶來的；依執行計畫「無候選結案」，預設不送 Eve。&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;③ 要 Ed 選：&lt;/b&gt;結案（依手冊 6-D 交結案存檔；本報告與附件已在策略包資料夾），或指定續做方向（例如以超額報酬重新定義假說另開策略卡）。另請確認第二期由 c4 改用已驗收 c5（D-068-20261111-2032-1）。&lt;/p&gt;
+&quot;&quot;&quot;
+
+body = f&quot;&quot;&quot;&lt;h1&gt;068 FinLab範例-60日動能ROE濾網｜V01／R01 回測結果&lt;/h1&gt;
+&lt;p&gt;Elon｜2026-11-11｜執行計畫修訂版 57、Elon 工作手冊 V31、研究預設口徑 V04｜策略卡 V01、策略包 R01。&lt;/p&gt;
+&lt;h2&gt;決策摘要&lt;/h2&gt;{summary}
+&lt;h2&gt;關卡一核准依據與相關決定（策略總表「決策紀錄」）&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;D-068-20261104-1938-1：關卡一核准策略卡 V01（範圍依卡；研究邊界：可交易性 L1、樣本內 ≤2022-06-30、隔離帶 2022-07-01～09-30、樣本外 ≥2022-10-01）。D-068-20261104-1947-1：6(c) 全採卡上建議。&lt;/li&gt;
+&lt;li&gt;D-068-20261111-0018-1～6：可測性補正（共用資料層、期限次一交易日起可用、雙週 ISO、歸屬母公司口徑、60 日前無收盤不排名、大盤濾網只擋新進場）；-0018-7：E-M1-ADJ。D-068-20261111-0055-1：月營收用 revinst。D-068-20261111-0949-1：E-BUF50、E-SKIP20、E-STOP15。&lt;/li&gt;
+&lt;li&gt;D-068-20261111-1507-1：做正式策略包，18 組全開樣本外、全做敏感度（敏感度範圍超出手冊 4-B「只對候選」，屬 Ed 指定加做）。D-068-20261111-1510-1：第一期改用 r72。D-068-20261111-1510-2：等第二期含上櫃變更交易名單的版本；D-068-20261111-2032-1：c4 被取代、改用已驗收 c5（Elon 登記，待 Ed 確認）。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2&gt;⓪ 符號與名詞定義&lt;/h2&gt;
+{table([&#x27;名詞&#x27;, &#x27;定義&#x27;], [
+ [&#x27;換股日 t&#x27;, &#x27;每月（V-2W／V-MERGE：ISO 雙數週）最後一個市場交易日；收盤後判斷、次一交易日開盤先賣後買&#x27;],
+ [&#x27;動能&#x27;, &#x27;換股日有成交收盤 ÷ 往前第 L 個市場交易日有成交收盤（未還原；E-M1-ADJ 用時點一致調整價；E-SKIP20 用第 20 日前÷第 80 日前）&#x27;],
+ [&#x27;ROE&gt;0&#x27;, &#x27;換股日當時已過法定期限（期限日之次一交易日起）最近一季：歸屬母公司淨利&gt;0 且歸屬母公司權益&gt;0（無非控制權益拆分者用本期淨利／權益總額）&#x27;],
+ [&#x27;一筆交易&#x27;, &#x27;連續持有段：入選買進到落選（或停損）賣出；續選續抱不另計&#x27;],
+ [&#x27;樣本內／隔離帶／樣本外／最新年度&#x27;, &#x27;出場日 ≤2022-06-30／與 2022-07-01～09-30 重疊／進場訊號日 ≥2022-10-01／樣本外中訊號日在 2026 年者（子集）&#x27;],
+ [&#x27;未完成&#x27;, &#x27;資料最後一日（2026-11-03）仍持有、持有期間下市缺口、異常跳動或公司行動資料不足者，不列入統計&#x27;],
+ [&#x27;持有交易日數&#x27;, &#x27;官方交易日曆含首尾；單利年化＝平均報酬×252÷平均持有交易日數&#x27;],
+ [&#x27;聚合 p&#x27;, &#x27;以進場日（換股執行日）為聚合單位，單位內報酬先平均再做單樣本 t 檢定；結論以聚合 p 為準&#x27;],
+ [&#x27;Holm 聚合 p&#x27;, &#x27;家族一＝策略卡 10 組變體＋V-MERGE；家族二＝4 組 E-Test；樣本內、樣本外各自修正&#x27;],
+ [&#x27;近似超額&#x27;, &#x27;個股報酬減加權報酬指數（進場日前一日收盤→出場日前一日收盤）；指數無開盤報酬值，故為近似，只作描述&#x27;]])}
+&lt;h2&gt;① 測試期間與資料&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;樣本：訊號 2013-05-16～2026-11-03（資料最後一日）。凍結紀錄：elon-bt experiments/068/freeze_068_R01.md（2026-11-11 15:38，sha256 d3653bfb…9d86）與補充 1（20:31，第二期改 c5），均在載入任何樣本外報酬前提交。&lt;/li&gt;
+&lt;li&gt;資料標籤：{html.escape(meta[&#x27;tags&#x27;])}；月營收 revinst-20261111 month_revenue（未送驗收）。財報與月營收為 FinMind 現行修訂值，時點未驗證。&lt;/li&gt;
+&lt;li&gt;股票池：當日官方上市／上櫃普通股（四碼、非 91xx），排除證交所全額交割與櫃買變更交易／管理股票（c5 上櫃名單 2008-04-09 起，涵蓋全樣本）；含日後下市者。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2&gt;② 進出場規則&lt;/h2&gt;
+&lt;p&gt;同快篩報告（D-068-20261111-0018-1～6）：全池取動能前 N 名，再保留 ROE&amp;gt;0（V-FILT1ST 先濾後排）；換股日次一交易日開盤等權買進，續選續抱、落選開盤賣出；進場開盤漲停／停牌取消不遞補；出場開盤跌停／停牌每日重試順延；報酬依固定股數加實得現金（研究預設口徑 V04）。各組只改策略卡 4.2 或 E-Test 所列一項參數。r72 仍有參考價＝前收的 7 個減資恢復日，以 corp_actions 推算恢復參考價與漲跌停（與快篩同做法）。&lt;b&gt;未計入稅、交易成本與滑價。&lt;/b&gt;&lt;/p&gt;
+&lt;h2&gt;③ 結果表（十項統計）&lt;/h2&gt;
+&lt;h3&gt;策略卡組合&lt;/h3&gt;{table(H10, ten_rows(CARD))}
+&lt;h3&gt;E-Test（討論衍生，6-A；條件與來源見下節）&lt;/h3&gt;{table(H10, ten_rows(ET))}
+&lt;p&gt;說明：樣本內 18 組中 17 組聚合 p&amp;lt;0.05（V-ROE8 除外），與快篩一致；樣本外平均報酬全部為正，逐筆 p 多數顯著，但以換股月為單位的聚合 p 只有 V-L20 &amp;lt;0.05（48 個月、同月持股高度同漲同跌，有效樣本小）。最新年度（2026，9 個換股月）平均報酬高但聚合單位數 &amp;lt;10，檢定力不足。&lt;/p&gt;
+&lt;h3&gt;回撤三項（等風險法，只供組合間比較）&lt;/h3&gt;{table([&#x27;組合&#x27;, &#x27;段&#x27;, &#x27;⑪最大回撤&#x27;, &#x27;⑫最差三次回撤平均&#x27;, &#x27;⑬最長回撤期&#x27;], dd_rows(CARD + ET))}
+&lt;h2&gt;④ 結論&lt;/h2&gt;
+&lt;p&gt;&lt;b&gt;本次回測沒有值得執行的候選組合。&lt;/b&gt;主要數據原因：&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;依凍結判讀，樣本外成立（平均報酬&amp;gt;0 且聚合 p&amp;lt;0.05）只有 V-L20；其敏感度樣本外僅 3／9 格顯著（尖峰），樣本內反而是 20 日回看表現較差的一組，不列候選。&lt;/li&gt;
+&lt;li&gt;V-REV 敏感度最穩（樣本內 8／9、樣本外 5／9 格顯著），但現行參數樣本外聚合 p {pv(g(&#x27;V-REV&#x27;,&#x27;樣本外&#x27;,&#x27;聚合p&#x27;))}，且近似超額 {pct(ex.set_index(&#x27;combo／sample&#x27;).loc[&#x27;V-REV｜樣本外&#x27;,&#x27;平均報酬&#x27;])}，不列候選。&lt;/li&gt;
+&lt;li&gt;相對大盤：樣本外 18 組近似超額全部不顯著、多數為負；等權淨值年化落後加權指數；樣本內近似超額也只有 V-2W、E-SKIP20 聚合 p&amp;lt;0.05。動能前 30＋ROE&amp;gt;0 的報酬大致是市場報酬，2022-10 後的強勢來自多頭行情。&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;此結論只是研究判斷。依執行計畫「無候選結案」，預設不送 Eve，由 Ed 決定結案或指定續做。&lt;/p&gt;
+&lt;h2&gt;⑤ 其後&lt;/h2&gt;
+&lt;h3&gt;敏感度測試（18 組 × 9 格＝162 格，格點依凍結紀錄第 5 節；單格 p 未做多重檢定修正）&lt;/h3&gt;
+{table([&#x27;組合&#x27;, &#x27;格數&#x27;, &#x27;樣本內正報酬格&#x27;, &#x27;樣本內聚合p顯著格&#x27;, &#x27;樣本外正報酬格&#x27;, &#x27;樣本外聚合p顯著格&#x27;, &#x27;內外同方向格&#x27;, &#x27;判讀&#x27;], [[r.combo, r.格數, r.樣本內正報酬格, r.樣本內聚合p顯著格, r.樣本外正報酬格, r.樣本外聚合p顯著格, r.內外同方向格, r.判讀] for r in sj.itertuples()])}
+&lt;p&gt;說明：162 格平均報酬全部為正、內外同方向；但樣本外聚合 p 顯著的格數普遍不足一半，只有 V-REV 達「穩健」門檻。中心格（現行參數）36 列與主結果逐筆一致。完整 162 格 × 2 段十項統計在原始數據明細 sens_grid 分頁。&lt;/p&gt;
+{table([&#x27;格&#x27;, &#x27;樣本內平均&#x27;, &#x27;樣本內聚合p&#x27;, &#x27;樣本外平均&#x27;, &#x27;樣本外聚合p&#x27;], [[r.cid + (&#x27;（現行）&#x27; if r.center else &#x27;&#x27;), pct(r.平均報酬_i), pv(r.聚合p_i), pct(r.平均報酬_o), pv(r.聚合p_o)] for r in ss[ss[&#x27;sample&#x27;]==&#x27;樣本內&#x27;].merge(ss[ss[&#x27;sample&#x27;]==&#x27;樣本外&#x27;][[&#x27;cid&#x27;,&#x27;平均報酬&#x27;,&#x27;聚合p&#x27;]], on=&#x27;cid&#x27;, suffixes=(&#x27;_i&#x27;,&#x27;_o&#x27;)).itertuples()])}
+&lt;h3&gt;描述性：相對加權報酬指數的近似超額報酬&lt;/h3&gt;
+{table([&#x27;組合｜段&#x27;, &#x27;樣本數&#x27;, &#x27;近似超額平均&#x27;, &#x27;同期指數平均&#x27;, &#x27;超額勝率&#x27;, &#x27;t值&#x27;, &#x27;聚合p&#x27;], [[r._1, f&quot;{int(r.樣本數):,}&quot;, pct(r.平均報酬), pct(r.基準平均), pct(r.勝率,1), num(r.t值,&#x27;{:.2f}&#x27;), pv(r.聚合p)] for r in ex.itertuples()])}
+&lt;h3&gt;描述性：等權組合淨值（樣本內、樣本外各自從空手開始）&lt;/h3&gt;
+{table([&#x27;組合&#x27;, &#x27;段&#x27;, &#x27;年化報酬&#x27;, &#x27;最大回撤&#x27;, &#x27;平均持股數&#x27;, &#x27;年換手率&#x27;], [[r.combo, r.段, pct(r.年化報酬,1), pct(r.最大回撤,1), f&quot;{r.平均持股數:.1f}&quot;, f&quot;{r.年換手率:.2f}&quot;] for r in nav.itertuples()])}
+&lt;p&gt;同期加權指數（價格）年化：樣本內 2013-05-16～2022-06-30 約 6.4%，樣本外 2022-10-01～2026-11-03 約 33.5%。&lt;/p&gt;
+&lt;h3&gt;快篩（r68）與 R01（r72＋c5）樣本內對照&lt;/h3&gt;
+{table([&#x27;組合&#x27;, &#x27;快篩樣本數&#x27;, &#x27;快篩平均&#x27;, &#x27;快篩聚合p&#x27;, &#x27;R01樣本數&#x27;, &#x27;R01平均&#x27;, &#x27;R01聚合p&#x27;], [[c, f&quot;{int(src.loc[c,&#x27;樣本數&#x27;]):,}&quot;, pct(src.loc[c,&#x27;平均報酬&#x27;]), pv(src.loc[c,&#x27;聚合p&#x27;]), f&quot;{int(g(c,&#x27;樣本內&#x27;,&#x27;樣本數&#x27;)):,}&quot;, pct(g(c,&#x27;樣本內&#x27;,&#x27;平均報酬&#x27;)), pv(g(c,&#x27;樣本內&#x27;,&#x27;聚合p&#x27;))] for c, src in [(c, (q3 if c in (&#x27;V-REV&#x27;,&#x27;V-MERGE&#x27;) else (qe if c.startswith(&#x27;E-&#x27;) else q)).set_index(&#x27;combo&#x27;)) for c in CARD + ET]])}
+&lt;p&gt;說明：差異來自 r72 公司行動與限幅修正、c5 上櫃全額交割排除改變了部分月份的前 30 名，以及樣本內改為「出場日 ≤2022-06-30」；方向與顯著性結論不變。&lt;/p&gt;
+&lt;h3&gt;修訂紀錄與檔案對應（R01 首版）&lt;/h3&gt;
+&lt;ul&gt;&lt;li&gt;本文件（回測結果，含注意事項）；程式附錄另見「068_FinLab範例-60日動能ROE濾網_V01_R01_程式附錄」；原始數據明細「068_FinLab範例-60日動能ROE濾網_V01_R01_原始數據明細.zip」（逐筆交易、開盤取消、敏感度 162 格逐筆與統計、未四捨五入統計表），均由 Elon 直接建在本策略包資料夾，無需 Ed 上傳。程式與明細另存 elon-bt experiments/068/R01。&lt;/li&gt;&lt;/ul&gt;
+&lt;h2&gt;⑥ 注意事項&lt;/h2&gt;
+&lt;ol&gt;
+&lt;li&gt;財報（fin-20261107）與月營收（revinst-20261111）未送驗收，為 FinMind 現行修訂值，時點未驗證。&lt;/li&gt;
+&lt;li&gt;樣本外以換股月聚合僅 48 單位，個股持有期互相重疊，聚合 p 仍可能偏樂觀；最新年度 9 單位，檢定力不足。&lt;/li&gt;
+&lt;li&gt;未完成或排除：跨隔離帶 {int((tr[&#x27;sample&#x27;]==&#x27;隔離帶&#x27;).sum()):,} 筆、資料最後一日仍持有 {int((tr.excluded_reason==&#x27;資料最後一日仍持有，未完成&#x27;).sum())} 筆、公司行動資料不足／異常跳動／限幅待查 {int(tr.excluded_reason.fillna(&#x27;&#x27;).str.contains(&#x27;資料不足|異常跳動|限幅&#x27;).sum())} 筆（全 18 組合計），明細附原因。&lt;/li&gt;
+&lt;li&gt;樣本外切點依關卡一核准，看報酬前凍結；第二期由 c4 改 c5 屬偏離，已另開補充並在看樣本外前提交。&lt;/li&gt;
+&lt;/ol&gt;
+&quot;&quot;&quot;
+open(&quot;reportR01.html&quot;, &quot;w&quot;, encoding=&quot;utf-8&quot;).write(&quot;&lt;html&gt;&lt;head&gt;&lt;meta charset=&#x27;utf-8&#x27;&gt;&lt;/head&gt;&lt;body&gt;&quot; + body + &quot;&lt;/body&gt;&lt;/html&gt;&quot;)
+print(len(body))
+</pre></body></html>
