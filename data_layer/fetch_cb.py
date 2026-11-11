@@ -57,6 +57,8 @@ def main():
             if "安全性考量" in h:
                 w.writerow([dt.datetime.utcnow().isoformat(), b, m, "error", "blocked"]); lf.flush()
                 time.sleep(60); hit = "error"; break
+        if len(done) + targets.index(tg) % 25 == 0:
+            print("progress", targets.index(tg), b, hit, flush=True)
         if hit is None:
             w.writerow([dt.datetime.utcnow().isoformat(), b, ";".join(tried[:3]) + f"..({len(tried)})", "notfound", ""]); lf.flush()
         elif hit == "error":

@@ -4,14 +4,14 @@ on:
   push:
     paths: ["jobs/cb_targets.csv", "data_layer/fetch_cb.py"]
   schedule:
-    - cron: "23 */6 * * *"
+    - cron: "23 * * * *"
   workflow_dispatch:
 permissions: { contents: write }
 concurrency: { group: fetch-cb, cancel-in-progress: false }
 jobs:
   fetch:
     runs-on: ubuntu-latest
-    timeout-minutes: 350
+    timeout-minutes: 70
     env: { GH_TOKEN: "${{ github.token }}" }
     steps:
       - uses: actions/checkout@v4
@@ -25,7 +25,7 @@ jobs:
           if [ -f raw/_cb_complete ]; then echo "DONE=1" >> $GITHUB_ENV; fi
       - name: fetch
         if: env.DONE != '1'
-        run: BUDGET_MIN=320 GAP=3 python data_layer/fetch_cb.py
+        run: BUDGET_MIN=45 GAP=3 python data_layer/fetch_cb.py
       - name: save
         if: always() && env.DONE != '1'
         run: |
