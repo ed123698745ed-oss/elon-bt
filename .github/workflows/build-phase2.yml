@@ -1,5 +1,5 @@
 name: build-phase2
-# 第二期共用資料層候選標籤：由 Release「raw-phase2」的官方原始檔建置 index_daily、surveillance、margin_flags、downtick_list、fulldelivery。
+# 第二期共用資料層候選標籤：由 Release「raw-phase2」的官方原始檔建置 index_daily、surveillance、margin_flags、downtick_list、fulldelivery（上市＋上櫃 2008-04-09 起）。
 # 標籤由 jobs/phase2_build.txt 的 tag= 指定；已存在就停止（不覆蓋）。任一來源未完成下載就停止，不發布不完整版本。
 on:
   push:
@@ -21,7 +21,7 @@ jobs:
         run: |
           mkdir -p p2 && cd p2
           gh release download raw-phase2 -p 'p2-*.tar.gz' -p 'p2-*.sha256'
-          for s in twse_tri twse_ix tpex_ix twse_punish twse_notice tpex_disposal tpex_attention twse_margin tpex_margin twse_mark tpex_mark twse_fulldelivery; do
+          for s in twse_tri twse_ix tpex_ix twse_punish twse_notice tpex_disposal tpex_attention twse_margin tpex_margin twse_mark tpex_mark twse_fulldelivery tpex_chtm; do
             sha256sum -c p2-$s.sha256 || { echo "雜湊不符 $s"; exit 1; }
             tar xzf p2-$s.tar.gz
             [ -f raw/_phase2_${s}_complete ] || { echo "來源未完成下載：$s，停止"; exit 1; }

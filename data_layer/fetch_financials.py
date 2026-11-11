@@ -16,8 +16,13 @@ os.environ.setdefault("RAW_DIR", "raw_fin")
 sys.path.insert(0, os.path.dirname(__file__))
 import fetch_finmind as fm  # noqa: E402
 
-FIN = ["TaiwanStockFinancialStatements", "TaiwanStockBalanceSheet"]
+# FIN_DATASETS：空白分隔的資料集；預設為 fin 組（損益表、資產負債表）。
+# 現金流量表另成 fincf 組（Ed 2026-11-11 14:24，D-070-20261111-1424-1）：FIN_DATASETS=TaiwanStockCashFlowsStatement、
+# TABLE=cashflow、STATUS=_status_fincf.json、BUILD_INDUSTRY=1（另出現行產業別表 industry.parquet）。
+FIN = os.environ.get("FIN_DATASETS", "TaiwanStockFinancialStatements TaiwanStockBalanceSheet").split()
 OUT = os.environ.get("OUT_DIR", "out_fin")
+TABLE = os.environ.get("TABLE", "financials")
+STATUS = os.environ.get("STATUS", "_status_fin.json")
 
 
 def remaining(ids):
@@ -44,7 +49,7 @@ def fetch():
             print(f"{done}/{len(todo)}", flush=True)
     st = {"universe": len(ids), "remaining": len(remaining(ids)), "done_this_run": done,
           "errors_this_run": errors, "at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
-    json.dump(st, open(os.path.join(fm.RAW, "_status_fin.json"), "w"))
+    json.dump(st, open(os.path.join(fm.RAW, STATUS), "w"))
     print(st, flush=True)
     return st
 
@@ -70,18 +75,45 @@ def build():
     df = pd.DataFrame(rows)
     df["stock_id"] = df["stock_id"].astype(str)
     df = df.sort_values(["dataset", "stock_id", "date", "type"]).reset_index(drop=True)
-    p = os.path.join(OUT, "financials.parquet")
+    p = os.path.join(OUT, f"{TABLE}.parquet")
     df.to_parquet(p, index=False)
     sha = hashlib.sha256(open(p, "rb").read()).hexdigest()
     m = {"built_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
          "source": "FinMind api/v4 " + ", ".join(FIN),
          "version_note": "FinMind 現行（最終修訂）值，非公告當時版本；重編影響於各案注意事項揭露",
-         "files": {"financials.parquet": {"rows": len(df), "sha256": sha}},
+         "files": {f"{TABLE}.parquet": {"rows": len(df), "sha256": sha}},
          "per_dataset": per,
          "date_range": [df["date"].min(), df["date"].max()] if len(df) else None,
          "code_commit": os.environ.get("GITHUB_SHA", "")}
-    json.dump(m, open(os.path.join(OUT, "manifest_fin.json"), "w"), ensure_ascii=False, indent=1)
+    if os.environ.get("BUILD_INDUSTRY") == "1":
+        ind = industry()
+        q = os.path.join(OUT, "industry.parquet")
+        ind.to_parquet(q, index=False)
+        m["files"]["industry.parquet"] = {"rows": len(ind), "sha256": hashlib.sha256(open(q, "rb").read()).hexdigest(),
+                                          "note": "FinMind TaiwanStockInfo 現行產業別（非歷史）；已下市公司 TaiwanStockInfo 無列者 industry 為空（資料不足）"}
+    json.dump(m, open(os.path.join(OUT, f"manifest_{TABLE}.json" if TABLE != "financials" else "manifest_fin.json"), "w"),
+              ensure_ascii=False, indent=1)
     print(json.dumps(m, ensure_ascii=False, indent=1))
+
+
+def industry():
+    """現行產業別：取 TaiwanStockInfo 的 industry_category（同一代號多列時逐列保留後去重）。
+    代號範圍＝universe()；TaiwanStockInfo 查無者（多為已下市）industry 留空，不推估。"""
+    import pandas as pd
+    ids = fm.universe()
+    info = pd.DataFrame(fm.load(fm.path("TaiwanStockInfo"))["data"])
+    info = info[info["type"].isin(["twse", "tpex"])]
+    info["stock_id"] = info["stock_id"].astype(str)
+    g = (info.groupby("stock_id")["industry_category"]
+         .apply(lambda x: "；".join(sorted({str(v).strip() for v in x if str(v).strip()}))).rename("industry"))
+    mk = info.groupby("stock_id")["type"].apply(lambda x: "；".join(sorted(set(x)))).rename("finmind_type")
+    dl = {str(x["stock_id"]) for x in fm.load(fm.path("TaiwanStockDelisting"))["data"]}
+    df = pd.DataFrame({"stock_id": ids}).merge(g, on="stock_id", how="left").merge(mk, on="stock_id", how="left")
+    df["delisted"] = df["stock_id"].isin(dl)
+    df["industry"] = df["industry"].replace("", pd.NA)
+    df["is_financial"] = df["industry"].map(lambda v: pd.NA if pd.isna(v) else ("金融" in v or "保險" in v)).astype("boolean")
+    df["source"] = "FinMind TaiwanStockInfo（現行）"
+    return df
 
 
 if __name__ == "__main__":

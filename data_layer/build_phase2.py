@@ -274,8 +274,12 @@ def downtick_coverage():
 
 
 def fulldelivery():
-    """證交所變更交易（全額交割）每日名單：名單內＝當日須預收款券。
-    period_auction＝分盤集合競價（官方以 ** 表示）。官方欄位自 2007-11-01 才有分盤欄；之前為 None（未知），不是 False。"""
+    """變更交易（全額交割）每日名單：名單內＝當日須預收款券。
+    上市：證交所 TWT85U（2004-12-24 起），kind＝變更交易。
+    上櫃：櫃買 afterTrading/chtm（2008-04-09 起），只收「變更交易」或「屬管理股票」為Ｙ者，kind 記兩者；
+          只有「停止交易」為Ｙ者不收。2005-06-01～2008-04-08 上櫃名單不在本表（官方 API 無資料），使用者須另行處理。
+    period_auction＝分盤集合競價：上市官方以 ** 表示，2007-11-01 前無此欄為 None（未知），不是 False；上櫃取「分盤交易」欄。
+    （上櫃名單加入：Ed 2026-11-11 14:24 選甲，D-070-20261111-1424-1）"""
     out = []
     for key, j in _load("twse_fulldelivery"):
         d = pd.Timestamp(key)
@@ -284,8 +288,19 @@ def fulldelivery():
             if len(r) < 2:
                 continue
             pa = (len(r) > 2 and str(r[2]).strip() == "**") if has_col else None
-            out.append((d, "上市", str(r[0]).strip(), clean_name(r[1]), pa))
-    df = pd.DataFrame(out, columns=["date", "market", "code", "name", "period_auction"])
+            out.append((d, "上市", str(r[0]).strip(), clean_name(r[1]), pa, "變更交易"))
+    for key, j in _load("tpex_chtm"):
+        d = pd.Timestamp(key)
+        t = j["tables"][0]
+        f = t.get("fields") or []
+        ia, ip, im = f.index("變更交易"), f.index("分盤交易"), f.index("屬管理股票")
+        for r in t.get("data") or []:
+            alt, man = str(r[ia]).strip() == "Ｙ", str(r[im]).strip() == "Ｙ"
+            if not (alt or man):
+                continue
+            kind = "；".join(k for k, v in (("變更交易", alt), ("管理股票", man)) if v)
+            out.append((d, "上櫃", str(r[0]).strip(), clean_name(r[1]), str(r[ip]).strip() == "Ｙ", kind))
+    df = pd.DataFrame(out, columns=["date", "market", "code", "name", "period_auction", "kind"])
     df["period_auction"] = df["period_auction"].astype("boolean")
     df["sec_kind"] = sec_kind_series(df["code"])
     return df
@@ -313,7 +328,7 @@ def main():
     fd = fulldelivery()
     fd.to_parquet(os.path.join(OUT, "fulldelivery.parquet"), index=False)
     if len(fd):
-        print("fulldelivery", len(fd), fd["date"].min().date(), fd["date"].max().date(), fd["date"].nunique(), "分盤", int(fd["period_auction"].fillna(False).sum()), "分盤未知", int(fd["period_auction"].isna().sum()))
+        print("fulldelivery", len(fd), fd.groupby("market")["date"].agg(["min", "max", "nunique", "size"]).to_string(), "分盤", int(fd["period_auction"].fillna(False).sum()), "分盤未知", int(fd["period_auction"].isna().sum()), fd["kind"].value_counts().to_dict())
     dl = downtick_list()
     dl.to_parquet(os.path.join(OUT, "downtick_list.parquet"), index=False)
     dc = downtick_coverage()

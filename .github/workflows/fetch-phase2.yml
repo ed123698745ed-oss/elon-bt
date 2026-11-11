@@ -15,7 +15,7 @@ jobs:
       fail-fast: false
       max-parallel: 6
       matrix:
-        src: [twse_tri, twse_ix, tpex_ix, twse_punish, twse_notice, tpex_disposal, tpex_attention, twse_margin, tpex_margin, twse_mark, tpex_mark, twse_fulldelivery]
+        src: [twse_tri, twse_ix, tpex_ix, twse_punish, twse_notice, tpex_disposal, tpex_attention, twse_margin, tpex_margin, twse_mark, tpex_mark, twse_fulldelivery, tpex_chtm]
     concurrency:
       group: fetch-phase2-${{ matrix.src }}
       cancel-in-progress: false

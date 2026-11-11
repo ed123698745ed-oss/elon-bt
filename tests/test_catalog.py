@@ -49,6 +49,8 @@ def test_catalog_md_is_current():
 def test_resolve_defaults_to_accepted_and_blocks_others():
     reg = _y("registry.yml")
     for g, v in reg["groups"].items():
+        if not v["tags"]:          # 新組尚未發佈第一個標籤（例：fincf 下載中）
+            continue
         acc = [t["tag"] for t in v["tags"] if t["status"] == "已驗收"]
         table = next(n for n, d in _y("tables.yml").items() if d["group"] == g)
         if acc:

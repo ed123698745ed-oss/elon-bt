@@ -99,11 +99,11 @@ downtick_coverage:
   caveats: 櫃買 2019-10-02 為資料缺口（官方回空表），不可當成無限制
 fulldelivery:
   group: phase2
-  title: 證交所變更交易（全額交割）名單
-  use: 預收款券、分盤集合競價
+  title: 變更交易（全額交割）名單（上市＋上櫃）
+  use: 預收款券、分盤集合競價；排除全額交割／管理股票
   key: date + code
   timing: 當日
-  caveats: 只有上市，2004-12-24 起；period_auction 在 2007-11-01 前為空值（未知）；櫃買變更交易無官方歷史
+  caveats: 上市 2004-12-24 起（TWT85U）；上櫃 2008-04-09 起（櫃買 afterTrading/chtm，kind 記變更交易／管理股票），2005-06～2008-04 上櫃名單不在本表；上市 period_auction 在 2007-11-01 前為空值（未知）；c4 起含上櫃，舊標籤只有上市
 financials:
   group: fin
   title: 財報（綜合損益表、資產負債表）
@@ -111,6 +111,20 @@ financials:
   key: stock_id + date + dataset + type
   timing: date 為財報期末，不是公告日；可得時點須依法定申報期限另行推算
   caveats: FinMind 現行（最終修訂）值，非公告當時版本；重編影響須在個案揭露；長表格式（type＝科目、value＝數值）
+cashflow:
+  group: fincf
+  title: 現金流量表（FinMind TaiwanStockCashFlowsStatement）
+  use: 營業／投資現金流、自由現金流（070 等）
+  key: stock_id + date + dataset + type
+  timing: date 為財報期末，不是公告日；可得時點須依法定申報期限另行推算
+  caveats: FinMind 現行（最終修訂）值，非公告當時版本；數值多為年內累計，單季須自行相減（Q4＝全年減前三季）；長表格式
+industry:
+  group: fincf
+  title: 現行產業別（FinMind TaiwanStockInfo）
+  use: 排除金融保險業等產業篩選
+  key: stock_id
+  timing: 現行分類，非歷史；回溯使用須在個案揭露
+  caveats: 已下市公司多無列（industry 空＝資料不足，不推估）；is_financial 由產業名含「金融」或「保險」判定
 tdcc_dist:
   group: tdcc
   title: 集保戶股權分散週表（8 級人數與比例）

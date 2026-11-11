@@ -14,6 +14,7 @@
 | phase2 | 第二期｜指數、處置注意、融資融券註記、平盤下名單、變更交易 | 無（load 會拒絕，需 allow_candidate） | 🟡 data-phase2-20261110c3（待驗收） |
 | fin | 財報｜綜合損益表、資產負債表（FinMind 現行值） | 無（load 會拒絕，需 allow_candidate） | ⚪ fin-20261107（未送驗收） |
 | tdcc | 集保戶股權分散週表（Goodinfo，053 股票池 98 檔） | 無（load 會拒絕，需 allow_candidate） | ⚪ data-tdcc-20261111（未送驗收） |
+| fincf | 現金流量表、現行產業別（FinMind 現行值；D-070-20261111-1424-1） | 無（load 會拒絕，需 allow_candidate） | — |
 | revinst | 月營收、三大法人買賣超（FinMind 現行值，全市場含已下市） | 無（load 會拒絕，需 allow_candidate） | ⚪ revinst-20261111（未送驗收） |
 
 ## 二、資料表一覽
@@ -36,8 +37,10 @@
 | `margin_flags` | 融資融券註記（停資、停券、停止買賣） | 放空腿能否融券、停止買賣 | phase2 🟡 | 8,503,993 | 2001-01-02～2026-11-03 | data_date 收盤後公布，effective（次一交易日）生效 |
 | `downtick_list` | 平盤下得融（借）券賣出名單 | 當日能否平盤下放空 | phase2 🟡 | 5,106,024 | 2013-09-18～2026-11-03 | 當日開盤前已知 |
 | `downtick_coverage` | 平盤下名單逐日覆蓋狀態 | 判斷某市場某日名單是有資料還是缺口 | phase2 🟡 | 6,403 | 2013-09-18～2026-11-03 | 查核用 |
-| `fulldelivery` | 證交所變更交易（全額交割）名單 | 預收款券、分盤集合競價 | phase2 🟡 | 107,618 | 2004-12-24～2026-11-03 | 當日 |
+| `fulldelivery` | 變更交易（全額交割）名單（上市＋上櫃） | 預收款券、分盤集合競價；排除全額交割／管理股票 | phase2 🟡 | 107,618 | 2004-12-24～2026-11-03 | 當日 |
 | `financials` | 財報（綜合損益表、資產負債表） | 財報類多空卡的基本面數字 | fin ⚪ | 10,466,736 | 1990-03-31～2026-09-30 | date 為財報期末，不是公告日；可得時點須依法定申報期限另行推算 |
+| `cashflow` | 現金流量表（FinMind TaiwanStockCashFlowsStatement） | 營業／投資現金流、自由現金流（070 等） | fincf | — | — | date 為財報期末，不是公告日；可得時點須依法定申報期限另行推算 |
+| `industry` | 現行產業別（FinMind TaiwanStockInfo） | 排除金融保險業等產業篩選 | fincf | — | — | 現行分類，非歷史；回溯使用須在個案揭露 |
 | `tdcc_dist` | 集保戶股權分散週表（8 級人數與比例） | 千張／400 張大戶持股比例與人數變化（data_layer.tdcc_dist.big_ratio／big_holders） | tdcc | — | — | 資料日期（週五為主）之後公布；保守以資料日期 + 7 日後首個交易日開盤為可用時點，由策略卡另定 |
 | `month_revenue` | 月營收（FinMind TaiwanStockMonthRevenue） | 月營收年增、月增、創新高等訊號（067 濾網⑤、068、073） | revinst ⚪ | 470,592 | 2002-02-01～2026-11-01 | date 為次月 1 日，不是公告日；法定期限為次月 10 日，保守以次月 10 日之後第一個交易日為可用時點，由策略卡另定 |
 | `institutional` | 三大法人個股買賣超（FinMind TaiwanStockInstitutionalInvestorsBuySell） | 外資、投信、自營商淨買賣超（067 濾網⑥、048、072） | revinst ⚪ | 24,030,289 | 2005-01-03～2026-11-10 | 當日盤後公布，次一交易日開盤可用 |
@@ -179,12 +182,12 @@
 - 🟡 data-phase2-20261110c3：6,403 列；期間 2013-09-18～2026-11-03
 - 欄位：`date`、`market`、`rows`、`status`
 
-### `fulldelivery`｜證交所變更交易（全額交割）名單
+### `fulldelivery`｜變更交易（全額交割）名單（上市＋上櫃）
 
-- 用途：預收款券、分盤集合競價
+- 用途：預收款券、分盤集合競價；排除全額交割／管理股票
 - 主鍵：date + code
 - 可得時點：當日
-- 注意：只有上市，2004-12-24 起；period_auction 在 2007-11-01 前為空值（未知）；櫃買變更交易無官方歷史
+- 注意：上市 2004-12-24 起（TWT85U）；上櫃 2008-04-09 起（櫃買 afterTrading/chtm，kind 記變更交易／管理股票），2005-06～2008-04 上櫃名單不在本表；上市 period_auction 在 2007-11-01 前為空值（未知）；c4 起含上櫃，舊標籤只有上市
 - 🟡 data-phase2-20261110c3：107,618 列；期間 2004-12-24～2026-11-03
 - 欄位：`date`、`market`、`code`、`name`、`period_auction`、`sec_kind`
 
@@ -196,6 +199,20 @@
 - 注意：FinMind 現行（最終修訂）值，非公告當時版本；重編影響須在個案揭露；長表格式（type＝科目、value＝數值）
 - ⚪ fin-20261107：10,466,736 列；期間 1990-03-31～2026-09-30
 - 欄位：`stock_id`、`date`、`dataset`、`type`、`value`、`origin_name`
+
+### `cashflow`｜現金流量表（FinMind TaiwanStockCashFlowsStatement）
+
+- 用途：營業／投資現金流、自由現金流（070 等）
+- 主鍵：stock_id + date + dataset + type
+- 可得時點：date 為財報期末，不是公告日；可得時點須依法定申報期限另行推算
+- 注意：FinMind 現行（最終修訂）值，非公告當時版本；數值多為年內累計，單季須自行相減（Q4＝全年減前三季）；長表格式
+
+### `industry`｜現行產業別（FinMind TaiwanStockInfo）
+
+- 用途：排除金融保險業等產業篩選
+- 主鍵：stock_id
+- 可得時點：現行分類，非歷史；回溯使用須在個案揭露
+- 注意：已下市公司多無列（industry 空＝資料不足，不推估）；is_financial 由產業名含「金融」或「保險」判定
 
 ### `tdcc_dist`｜集保戶股權分散週表（8 級人數與比例）
 
@@ -248,6 +265,7 @@
 - `raw-market`：第一期官方逐日市場別原始檔與單次探測結果
 - `raw-financials`：財報 FinMind 原始回傳
 - `raw-progress`：FinMind 下載進度與 StockInfo／Delisting 清單
+- `raw-cashflow`：現金流量表 FinMind 原始回傳與下載進度（070 起共用）
 - `raw-revinst`：月營收與三大法人 FinMind 原始回傳與下載進度
 - `raw-064-annual`：策略064 年報原始檔（個案用）
 

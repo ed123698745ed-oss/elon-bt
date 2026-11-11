@@ -1,0 +1,68 @@
+name: fetch-cashflow
+# 現金流量表原始資料下載＋現行產業別，進度存在 Release「raw-cashflow」（Ed 2026-11-11 14:24 選甲，D-070-20261111-1424-1）。
+# 不限時段，與 fetch-revinst 共用 FINMIND_TOKEN_1～4 輪用（402 冷卻）；全部抓完後建置並發佈 Release fincf-YYYYMMDD。
+on:
+  push:
+    paths: ["jobs/cashflow.txt"]
+  schedule:
+    - cron: "50 1,7,13,19 * * *"   # 每 6 小時接續（與 revinst 錯開）；抓完後自動跳過
+  workflow_dispatch:
+concurrency: { group: fetch-cashflow, cancel-in-progress: false }
+permissions: { contents: write }
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      FINMIND_TOKEN_1: ${{ secrets.FINMIND_TOKEN_1 }}
+      FINMIND_TOKEN_2: ${{ secrets.FINMIND_TOKEN_2 }}
+      FINMIND_TOKEN_3: ${{ secrets.FINMIND_TOKEN_3 }}
+      FINMIND_TOKEN_4: ${{ secrets.FINMIND_TOKEN_4 }}
+      RAW_DIR: raw_cf
+      OUT_DIR: out_cf
+      FIN_DATASETS: TaiwanStockCashFlowsStatement
+      TABLE: cashflow
+      STATUS: _status_fincf.json
+      BUILD_INDUSTRY: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install pandas pyarrow
+      - name: already published?
+        run: |
+          if gh release list --limit 100 | grep -q '^fincf-\|	fincf-'; then echo "SKIP=1" >> $GITHUB_ENV; echo "已有 fincf- 版本，跳過"; fi
+      - name: restore progress and universe
+        if: env.SKIP != '1'
+        run: |
+          gh release view raw-cashflow >/dev/null 2>&1 || gh release create raw-cashflow --title raw-cashflow --notes "現金流量表原始資料下載進度（自動更新）" --prerelease
+          gh release download raw-cashflow -p raw-cashflow.tar.gz || true
+          [ -f raw-cashflow.tar.gz ] && tar xzf raw-cashflow.tar.gz || mkdir -p raw_cf
+          # 代號清單沿用第一期 raw-progress（與 data-20261105 同一份 TaiwanStockInfo／TaiwanStockDelisting）
+          gh release download raw-progress -p raw-progress.tar.gz
+          tar xzf raw-progress.tar.gz raw/finmind/TaiwanStockInfo raw/finmind/TaiwanStockDelisting
+          mkdir -p raw_cf/finmind && cp -r raw/finmind/TaiwanStockInfo raw/finmind/TaiwanStockDelisting raw_cf/finmind/
+          rm -rf raw raw-progress.tar.gz
+      - name: fetch
+        if: env.SKIP != '1'
+        run: ALLOW_HOURS= BUDGET_MIN=320 python data_layer/fetch_financials.py fetch
+      - name: save progress
+        if: always() && env.SKIP != '1'
+        run: |
+          tar czf raw-cashflow.tar.gz raw_cf
+          sha256sum raw-cashflow.tar.gz | tee raw-cashflow.sha256
+          files="raw-cashflow.tar.gz raw-cashflow.sha256"
+          for f in raw_cf/_attempts_finmind.csv raw_cf/_status_fincf.json; do [ -s "$f" ] && files="$files $f"; done
+          gh release upload raw-cashflow $files --clobber
+      - name: build and publish when complete
+        if: env.SKIP != '1'
+        run: |
+          left=$(python -c "import json;print(json.load(open('raw_cf/_status_fincf.json'))['remaining'])")
+          echo "remaining=$left"
+          [ "$left" = "0" ] || exit 0
+          python data_layer/fetch_financials.py build
+          TAG=fincf-$(TZ=Asia/Taipei date +%Y%m%d)
+          if gh release view "$TAG" >/dev/null 2>&1; then echo "release $TAG 已存在，停止"; exit 1; fi
+          cp raw-cashflow.tar.gz raw-cashflow.sha256 out_cf/
+          gh release create "$TAG" --title "$TAG 現金流量表與現行產業別" --notes "cashflow.parquet（現金流量表，FinMind 現行值，多為年內累計數）、industry.parquet（FinMind TaiwanStockInfo 現行產業別）；清冊 manifest_cashflow.json；原始資料 raw-cashflow.tar.gz；程式版本見 manifest_cashflow.code_commit" out_cf/*

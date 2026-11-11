@@ -2,7 +2,7 @@
 
 用法：python data_layer/fetch_phase2.py <src>
 src：twse_fulldelivery twse_tri twse_ix tpex_ix twse_punish twse_notice tpex_disposal tpex_attention
-     twse_margin tpex_margin twse_mark tpex_mark
+     twse_margin tpex_margin twse_mark tpex_mark tpex_chtm
 原則（防錯清單 A11／退回-60、67）：每筆回應都核對回傳的日期／區間與查詢一致，不符者不存、記入 attempts；
 查無資料（官方明示）存原檔並標 empty，不推估。可續傳：已存在的檔案略過。
 """
@@ -103,6 +103,9 @@ def jobs(src):
     elif src == "twse_fulldelivery":   # 變更交易（全額交割）每日名單，官方自 93/12/24 起
         for d in trading_days(dt.date(2004, 12, 24)):
             yield d.strftime("%Y%m%d"), f"{TW}/fullDelivery/TWT85U?date={d:%Y%m%d}&response=json", d
+    elif src == "tpex_chtm":   # 櫃買變更交易／分盤／管理股票每日名單；API 自 97/04/09 起有資料（04/08 以前回空表）
+        for d in trading_days(dt.date(2008, 4, 9)):
+            yield d.strftime("%Y%m%d"), f"{TP}/afterTrading/chtm?date={d:%Y/%m/%d}&response=json", d
     else:
         raise SystemExit(f"unknown src {src}")
 
@@ -162,6 +165,11 @@ def check(src, j, d):
             return f"date不符:{j.get('date')}/{t.get('date')}"
         rows = [r for r in t.get("data", []) if len(r) > 1]   # 早年平盤下名單只回一列日期，不算資料
         return "ok" if rows else "empty"
+    if src == "tpex_chtm":
+        t = j["tables"][0]
+        if j.get("date") != d.strftime("%Y%m%d") or t.get("date") != roc(d):
+            return f"date不符:{j.get('date')}/{t.get('date')}"
+        return "ok" if t.get("data") else "empty"
     return "未定義核對"
 
 

@@ -126,11 +126,21 @@ def test_fulldelivery_keys():
     if not len(d):
         pytest.skip("尚未下載")
     assert not d.duplicated(["date", "code"]).any()
-    assert d["date"].isin(_cal()).all() and d["date"].min() >= pd.Timestamp("2004-12-24")
-    miss = [x for x in sorted(_cal()) if x >= pd.Timestamp("2004-12-24") and x not in set(d["date"])]
-    assert not miss, miss[:5]
-    pre = d["date"] < pd.Timestamp("2007-11-01")                 # 官方欄位自 2007-11-01 才有分盤欄：之前未知，不可當 False
+    assert set(d["market"]) <= {"上市", "上櫃"}
+    assert d["date"].isin(_cal()).all()
+    starts = {"上市": pd.Timestamp("2004-12-24"), "上櫃": pd.Timestamp("2008-04-09")}   # 上櫃官方 API 自 97/04/09 起
+    for mkt, st in starts.items():
+        x = d[d["market"] == mkt]
+        if mkt == "上櫃" and not len(x):
+            continue
+        assert x["date"].min() >= st
+        miss = [t for t in sorted(_cal()) if t >= st and t not in set(x["date"])]
+        assert not miss, (mkt, miss[:5])
+    tw = d["market"] == "上市"
+    pre = tw & (d["date"] < pd.Timestamp("2007-11-01"))      # 上市官方欄位自 2007-11-01 才有分盤欄：之前未知，不可當 False
     assert d.loc[pre, "period_auction"].isna().all() and d.loc[~pre, "period_auction"].notna().all()
+    assert d.loc[tw, "kind"].eq("變更交易").all()
+    assert d.loc[~tw, "kind"].isin(["變更交易", "管理股票", "變更交易；管理股票"]).all()
 
 
 @need
