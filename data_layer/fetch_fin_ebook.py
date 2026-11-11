@@ -47,13 +47,15 @@ def stop(where, key):
 
 
 def pages_with(pdf_path):
+    """保留損益表候選頁：含「母公司業主」或「歸屬於」且含「損益」。另回傳全檔字數，判斷是否為掃描檔。"""
     import pypdfium2 as pdfium
-    doc = pdfium.PdfDocument(pdf_path); out = []
+    doc = pdfium.PdfDocument(pdf_path); out = []; chars = 0
     for i in range(len(doc)):
         t = doc[i].get_textpage().get_text_range()
-        if "母公司業主" in re.sub(r"\s+", "", t):
+        y = re.sub(r"\s+", "", t); chars += len(y)
+        if "母公司業主" in y or ("歸屬於" in y and "損益" in y):
             out.append({"page": i + 1, "text": t})
-    return out
+    return out, chars, len(doc)
 
 
 def main():
@@ -64,8 +66,9 @@ def main():
     for r in todo:
         sid, y, s = r["stock_id"], r["roc_year"], r["seamon"]
         key = f"{sid}_{y}_{s}"
-        if key in prog["done"]:
-            continue
+        d0 = prog["done"].get(key)
+        if d0 and not (d0.get("status") == "ok" and not d0.get("pages") and d0.get("v") != 2):
+            continue   # 第一版只存含「母公司業主」頁；沒存到頁面的舊紀錄用新規則重抓一次
         if time.time() - T0 > BUDGET:
             print("時間預算用完，下次接續"); break
         b = req(f"{BASE}?step=1&colorchg=1&co_id={sid}&year={y}&seamon={s}&mtype=A")
@@ -91,7 +94,8 @@ def main():
         p = os.path.join(OUT, "tmp.pdf"); open(p, "wb").write(pdf)
         rec.update(status="ok", file=fn[0], bytes=len(pdf), sha256=hashlib.sha256(pdf).hexdigest())
         try:
-            pg = pages_with(p); rec["pages"] = [x["page"] for x in pg]
+            pg, chars, npages = pages_with(p); rec["pages"] = [x["page"] for x in pg]
+            rec.update(text_chars=chars, n_pages=npages, v=2)
             for x in pg:
                 pj.write(json.dumps({"key": key, "file": fn[0], **x}, ensure_ascii=False) + "\n")
             pj.flush()
@@ -99,7 +103,10 @@ def main():
             rec["extract_error"] = str(e)[:200]
         os.remove(p)
         prog["done"][key] = rec; prog["blocked_runs"] = 0; save()
-    left = sum(1 for r in todo if f"{r['stock_id']}_{r['roc_year']}_{r['seamon']}" not in prog["done"])
+    def pending(k):
+        d0 = prog["done"].get(k)
+        return d0 is None or (d0.get("status") == "ok" and not d0.get("pages") and d0.get("v") != 2)
+    left = sum(1 for r in todo if pending(f"{r['stock_id']}_{r['roc_year']}_{r['seamon']}"))
     prog["remaining"] = left; save()
     if left == 0:
         open(os.path.join(OUT, "_complete"), "w").write(time.strftime("%F"))
