@@ -43,7 +43,8 @@ groups:
     tags: []
   pbr:
     title: 估值｜官方每日本益比、殖利率、股價淨值比（證交所 BWIBBU_d、櫃買 peQryDate；D-071-20261111-2354-1）
-    tags: []
+    tags:
+      - {tag: pbr-20261112m, status: 未送驗收, note: 月底交易日完整版（上市 2005-09 起 255 個月底、上櫃 2007-01 起 239 個月底）；其餘交易日下載中，valuation_coverage 標 missing；071 快篩用}
 raw:
   # 原始檔倉庫：建置用，不供回測直接讀取
   - {tag: raw-cb, note: 可轉債發行基本資料原始頁（公開資訊觀測站 t120sg01）與下載進度}

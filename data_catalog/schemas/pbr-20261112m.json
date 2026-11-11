@@ -1,0 +1,103 @@
+{
+ "tag": "pbr-20261112m",
+ "manifest": "manifest.json",
+ "code_commit": "4638307b195ee41cc9b94bc3c4a8f760633da8e3",
+ "tests_exit_code": 0,
+ "source_asof": null,
+ "tables": {
+  "valuation_coverage": {
+   "rows": 10075,
+   "size": 56750,
+   "columns": [
+    {
+     "name": "date",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "market",
+     "type": "large_string"
+    },
+    {
+     "name": "status",
+     "type": "large_string"
+    },
+    {
+     "name": "month_end",
+     "type": "bool"
+    }
+   ],
+   "ranges": {
+    "date": [
+     "2005-09-02",
+     "2026-11-03"
+    ]
+   },
+   "sha256": "d2598797152b9f6640274e6754120a903368c9d2cab05e44daaee94364b7c2b4"
+  },
+  "valuation_daily": {
+   "rows": 387849,
+   "size": 3126392,
+   "columns": [
+    {
+     "name": "date",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "stock_id",
+     "type": "large_string"
+    },
+    {
+     "name": "market",
+     "type": "large_string"
+    },
+    {
+     "name": "name",
+     "type": "large_string"
+    },
+    {
+     "name": "name_star",
+     "type": "bool"
+    },
+    {
+     "name": "pe",
+     "type": "double"
+    },
+    {
+     "name": "dividend_yield",
+     "type": "double"
+    },
+    {
+     "name": "pbr",
+     "type": "double"
+    },
+    {
+     "name": "fin_period",
+     "type": "large_string"
+    },
+    {
+     "name": "close_ref",
+     "type": "double"
+    },
+    {
+     "name": "div_year",
+     "type": "int64"
+    },
+    {
+     "name": "dps",
+     "type": "double"
+    },
+    {
+     "name": "src",
+     "type": "large_string"
+    }
+   ],
+   "ranges": {
+    "date": [
+     "2005-09-30",
+     "2026-11-03"
+    ]
+   },
+   "sha256": "3938b851ca3289a117e0bd7668f69fa7e8a45c2e7f358bca6c50678ff7a438c3"
+  }
+ }
+}
