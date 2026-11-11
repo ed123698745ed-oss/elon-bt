@@ -1,4 +1,5 @@
-t108sb12	https://mopsov.twse.com.tw/mops/web/t108sb12	
+q1	https://mopsov.twse.com.tw/mops/web/t120sb02_q1	
+q2	https://mopsov.twse.com.tw/mops/web/t120sb02_q2	
+q9	https://mopsov.twse.com.tw/mops/web/t120sb02_q9	
+q10	https://mopsov.twse.com.tw/mops/web/t120sb02_q10	
 t108sb08	https://mopsov.twse.com.tw/mops/web/t108sb08	
-t120sg01	https://mopsov.twse.com.tw/mops/web/t120sg01	
-bond_t108sb12_1101	https://mopsov.twse.com.tw/mops/web/ajax_t108sb12	encodeURIComponent=1&step=1&firstin=1&off=1&TYPEK=all&co_id=1101
