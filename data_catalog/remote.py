@@ -18,7 +18,7 @@ def get(u, rng=None, timeout=120):
 
 
 def manifest(tag):
-    for n in ("manifest.json", "manifest_fin.json"):
+    for n in ("manifest.json", "manifest_fin.json", "manifest_revinst.json"):
         try:
             b, _ = get(url(tag, n))
             return n, json.loads(b)

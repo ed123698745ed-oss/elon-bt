@@ -14,6 +14,7 @@
 | phase2 | 第二期｜指數、處置注意、融資融券註記、平盤下名單、變更交易 | 無（load 會拒絕，需 allow_candidate） | 🟡 data-phase2-20261110c3（待驗收） |
 | fin | 財報｜綜合損益表、資產負債表（FinMind 現行值） | 無（load 會拒絕，需 allow_candidate） | ⚪ fin-20261107（未送驗收） |
 | tdcc | 集保戶股權分散週表（Goodinfo，053 股票池 98 檔） | 無（load 會拒絕，需 allow_candidate） | ⚪ data-tdcc-20261111（未送驗收） |
+| revinst | 月營收、三大法人買賣超（FinMind 現行值，全市場含已下市） | 無（load 會拒絕，需 allow_candidate） | ⚪ revinst-20261111（未送驗收） |
 
 ## 二、資料表一覽
 
@@ -38,6 +39,8 @@
 | `fulldelivery` | 證交所變更交易（全額交割）名單 | 預收款券、分盤集合競價 | phase2 🟡 | 107,618 | 2004-12-24～2026-11-03 | 當日 |
 | `financials` | 財報（綜合損益表、資產負債表） | 財報類多空卡的基本面數字 | fin ⚪ | 10,466,736 | 1990-03-31～2026-09-30 | date 為財報期末，不是公告日；可得時點須依法定申報期限另行推算 |
 | `tdcc_dist` | 集保戶股權分散週表（8 級人數與比例） | 千張／400 張大戶持股比例與人數變化（data_layer.tdcc_dist.big_ratio／big_holders） | tdcc | — | — | 資料日期（週五為主）之後公布；保守以資料日期 + 7 日後首個交易日開盤為可用時點，由策略卡另定 |
+| `month_revenue` | 月營收（FinMind TaiwanStockMonthRevenue） | 月營收年增、月增、創新高等訊號（067 濾網⑤、068、073） | revinst ⚪ | 470,592 | 2002-02-01～2026-11-01 | date 為次月 1 日，不是公告日；法定期限為次月 10 日，保守以次月 10 日之後第一個交易日為可用時點，由策略卡另定 |
+| `institutional` | 三大法人個股買賣超（FinMind TaiwanStockInstitutionalInvestorsBuySell） | 外資、投信、自營商淨買賣超（067 濾網⑥、048、072） | revinst ⚪ | 24,030,289 | 2005-01-03～2026-11-10 | 當日盤後公布，次一交易日開盤可用 |
 
 ## 三、各表說明
 
@@ -201,6 +204,24 @@
 - 可得時點：資料日期（週五為主）之後公布；保守以資料日期 + 7 日後首個交易日開盤為可用時點，由策略卡另定
 - 注意：來源 Goodinfo 非官方原檔；比例多數僅小數一位（約 ±0.05 個百分點）；目前只收 053 股票池 98 檔；2015-04 前集保為月公布，本表不收；春節等無資料週不產生列
 
+### `month_revenue`｜月營收（FinMind TaiwanStockMonthRevenue）
+
+- 用途：月營收年增、月增、創新高等訊號（067 濾網⑤、068、073）
+- 主鍵：stock_id + revenue_year + revenue_month
+- 可得時點：date 為次月 1 日，不是公告日；法定期限為次月 10 日，保守以次月 10 日之後第一個交易日為可用時點，由策略卡另定
+- 注意：FinMind 現行值，非公告當時版本（更正後數字會覆蓋）；單位為元；303 個代號無資料（多為早期下市或無申報）
+- ⚪ revinst-20261111：470,592 列；期間 2002-02-01～2026-11-01
+- 欄位：`stock_id`、`date`、`revenue_year`、`revenue_month`、`revenue`、`country`
+
+### `institutional`｜三大法人個股買賣超（FinMind TaiwanStockInstitutionalInvestorsBuySell）
+
+- 用途：外資、投信、自營商淨買賣超（067 濾網⑥、048、072）
+- 主鍵：date + stock_id + name
+- 可得時點：當日盤後公布，次一交易日開盤可用
+- 注意：單位為股；長表格式（name＝法人別）；2012-05 前每年僅約 400～680 檔，之後才接近全市場；外資 2017 起拆出 Foreign_Dealer_Self（外資自營商），Foreign_Investor 為不含外資自營商；自營商 2014 起拆為 Dealer_self／Dealer_Hedging；431 個代號無資料
+- ⚪ revinst-20261111：24,030,289 列；期間 2005-01-03～2026-11-10
+- 欄位：`date`、`stock_id`、`name`、`buy`、`sell`
+
 ## 四、全部標籤
 
 | 組 | 標籤 | 狀態 | 說明 | 程式 commit | 測試 |
@@ -219,6 +240,7 @@
 | phase2 | data-phase2-20261110c3 | 🟡 待驗收 | 補正 Eve 退回 c2：3.5% 期間延至 2023-02-23、新增 2015 全面禁止期間、處置內文日期比對 | e5d5c18 | 通過 |
 | fin | fin-20261107 | ⚪ 未送驗收 | FinMind 現行（最終修訂）值，非公告當時版本 | 7c7b6f0 |  |
 | tdcc | data-tdcc-20261111 | ⚪ 未送驗收 | 2015-05～2026-11；兩份原檔合併，重疊 188 列無衝突；比例多數僅小數一位 |  |  |
+| revinst | revinst-20261111 | ⚪ 未送驗收 | 月營收 2002-02～2026-11、法人 2005-01～2026-11（2012-05 前覆蓋僅約 400～680 檔）；D-067-20261111-0016-1 | cb6dbee |  |
 
 原始檔倉庫（建置用，不供回測直接讀取）：
 
@@ -226,6 +248,7 @@
 - `raw-market`：第一期官方逐日市場別原始檔與單次探測結果
 - `raw-financials`：財報 FinMind 原始回傳
 - `raw-progress`：FinMind 下載進度與 StockInfo／Delisting 清單
+- `raw-revinst`：月營收與三大法人 FinMind 原始回傳與下載進度
 - `raw-064-annual`：策略064 年報原始檔（個案用）
 
 資料截至日（各來源最後完整檢查日；open_periods 為當時尚未結束、之後會更新的期間）：
@@ -236,5 +259,3 @@
 ## 五、未登記標籤（load() 不會使用，須先登記並送驗收）
 
 - ⚠ `raw-068-revenue`
-- ⚠ `raw-revinst`
-- ⚠ `revinst-20261111`

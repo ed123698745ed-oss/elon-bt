@@ -118,3 +118,17 @@ tdcc_dist:
   key: date + stock_id
   timing: 資料日期（週五為主）之後公布；保守以資料日期 + 7 日後首個交易日開盤為可用時點，由策略卡另定
   caveats: 來源 Goodinfo 非官方原檔；比例多數僅小數一位（約 ±0.05 個百分點）；目前只收 053 股票池 98 檔；2015-04 前集保為月公布，本表不收；春節等無資料週不產生列
+month_revenue:
+  group: revinst
+  title: 月營收（FinMind TaiwanStockMonthRevenue）
+  use: 月營收年增、月增、創新高等訊號（067 濾網⑤、068、073）
+  key: stock_id + revenue_year + revenue_month
+  timing: date 為次月 1 日，不是公告日；法定期限為次月 10 日，保守以次月 10 日之後第一個交易日為可用時點，由策略卡另定
+  caveats: FinMind 現行值，非公告當時版本（更正後數字會覆蓋）；單位為元；303 個代號無資料（多為早期下市或無申報）
+institutional:
+  group: revinst
+  title: 三大法人個股買賣超（FinMind TaiwanStockInstitutionalInvestorsBuySell）
+  use: 外資、投信、自營商淨買賣超（067 濾網⑥、048、072）
+  key: date + stock_id + name
+  timing: 當日盤後公布，次一交易日開盤可用
+  caveats: 單位為股；長表格式（name＝法人別）；2012-05 前每年僅約 400～680 檔，之後才接近全市場；外資 2017 起拆出 Foreign_Dealer_Self（外資自營商），Foreign_Investor 為不含外資自營商；自營商 2014 起拆為 Dealer_self／Dealer_Hedging；431 個代號無資料

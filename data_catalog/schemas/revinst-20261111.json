@@ -1,0 +1,79 @@
+{
+ "tag": "revinst-20261111",
+ "manifest": "manifest_revinst.json",
+ "code_commit": "cb6dbeebabd400da92cb9b0200657c5fc2eaefc2",
+ "tests_exit_code": null,
+ "source_asof": null,
+ "tables": {
+  "month_revenue": {
+   "rows": 470592,
+   "size": 3296172,
+   "columns": [
+    {
+     "name": "stock_id",
+     "type": "large_string"
+    },
+    {
+     "name": "date",
+     "type": "large_string"
+    },
+    {
+     "name": "revenue_year",
+     "type": "int64"
+    },
+    {
+     "name": "revenue_month",
+     "type": "int64"
+    },
+    {
+     "name": "revenue",
+     "type": "int64"
+    },
+    {
+     "name": "country",
+     "type": "large_string"
+    }
+   ],
+   "ranges": {
+    "date": [
+     "2002-02-01",
+     "2026-11-01"
+    ]
+   },
+   "sha256": "5fd58c5e8d29d434927ca6f00fc0a05d6e4300492c4988705954076e6fb38e7a"
+  },
+  "institutional": {
+   "rows": 24030289,
+   "size": 97449732,
+   "columns": [
+    {
+     "name": "date",
+     "type": "large_string"
+    },
+    {
+     "name": "stock_id",
+     "type": "large_string"
+    },
+    {
+     "name": "name",
+     "type": "large_string"
+    },
+    {
+     "name": "buy",
+     "type": "int64"
+    },
+    {
+     "name": "sell",
+     "type": "int64"
+    }
+   ],
+   "ranges": {
+    "date": [
+     "2005-01-03",
+     "2026-11-10"
+    ]
+   },
+   "sha256": "4942d673549a9327711b32f19b735207954c5142f617b94c8d5d86310b8259ca"
+  }
+ }
+}

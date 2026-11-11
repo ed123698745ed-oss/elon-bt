@@ -28,10 +28,15 @@ groups:
     title: 集保戶股權分散週表（Goodinfo，053 股票池 98 檔）
     tags:
       - {tag: data-tdcc-20261111, status: 未送驗收, note: 2015-05～2026-11；兩份原檔合併，重疊 188 列無衝突；比例多數僅小數一位}
+  revinst:
+    title: 月營收、三大法人買賣超（FinMind 現行值，全市場含已下市）
+    tags:
+      - {tag: revinst-20261111, status: 未送驗收, note: 月營收 2002-02～2026-11、法人 2005-01～2026-11（2012-05 前覆蓋僅約 400～680 檔）；D-067-20261111-0016-1}
 raw:
   # 原始檔倉庫：建置用，不供回測直接讀取
   - {tag: raw-phase2, note: 第二期 12 個官方來源原始檔（每日更新當月／當年檔）}
   - {tag: raw-market, note: 第一期官方逐日市場別原始檔與單次探測結果}
   - {tag: raw-financials, note: 財報 FinMind 原始回傳}
   - {tag: raw-progress, note: FinMind 下載進度與 StockInfo／Delisting 清單}
+  - {tag: raw-revinst, note: 月營收與三大法人 FinMind 原始回傳與下載進度}
   - {tag: raw-064-annual, note: 策略064 年報原始檔（個案用）}
