@@ -1,0 +1,22 @@
+{
+ "IS_quarters": 48,
+ "IS_signal_first": "2008-06-30",
+ "IS_signal_last": "2020-03-31",
+ "OOS_quarters": 24,
+ "OOS_signal_first": "2020-09-30",
+ "OOS_signal_last": "2026-06-30",
+ "V": "V01",
+ "basis": "D-071-20261104-1938-1 卡 6(d)『資料最早可用年份晚於2006年依2/3:1/3重算』；D-071-20261111-2354-2",
+ "data_end_calendar": "2026-11-03",
+ "data_start": {
+  "fulldelivery_tpex": "2008-04-09",
+  "pbr_tpex_finmind_probe": "2007-01-02",
+  "pbr_twse_finmind_probe": "2005-09-02",
+  "research_start": "2008-04-09"
+ },
+ "frozen_at": "2026-11-11T23:57:18+08:00",
+ "isolation_signal": "2020-06-30（2020Q3 持有季）",
+ "returns_seen": false,
+ "rule": "持有段（季組合）以進場日判斷：樣本內＝進場日≤2020-06-30且出場日≤隔離帶第一個交易日（開盤出場）；隔離帶 2020-07-01～2020-09-30；樣本外＝進場日≥2020-10-01；其餘不列入任一段。月換股變體同規則。",
+ "strategy": "071 FinLab範例-低淨值比多空對沖"
+}
