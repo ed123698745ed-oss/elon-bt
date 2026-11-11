@@ -13,13 +13,13 @@ groups:
       - {tag: data-20261110r70, status: 已被取代, note: 建置時測試在收集階段中斷（缺 pyyaml），由 r70b 取代}
       - {tag: data-20261110r70b, status: 已被取代, note: 補正 Eve 退回 r69（低價股漲跌停）；未送審，由 r72 取代}
       - {tag: data-20261110r71, status: 已被取代, note: 自查補正版，但零價列標記索引錯位；未送審，由 r72 取代}
-      - {tag: data-20261110r72, status: 待複審, note: 補正 Eve 退回 r69（低價股漲跌停）＋自查：開高低為0改空值、盤中價超出推算漲跌停改待查（共 761 列）}
+      - {tag: data-20261110r72, status: 已驗收, note: Eve 複審通過（2026-11-11）。 補正 Eve 退回 r69（低價股漲跌停）＋自查：開高低為0改空值、盤中價超出推算漲跌停改待查（共 761 列）}
   phase2:
     title: 第二期｜指數、處置注意、融資融券註記、平盤下名單、變更交易
     tags:
       - {tag: data-phase2-20261107c1, status: 已被取代, note: 未送審；外部審查後由 c2 取代}
       - {tag: data-phase2-20261107c2, status: 已退回, note: Eve 2026-11-10 退回：2023-02-23 ban_rule 錯標、處置表格與內文日期衝突未標}
-      - {tag: data-phase2-20261110c3, status: 待驗收, note: 補正 Eve 退回 c2：3.5% 期間延至 2023-02-23、新增 2015 全面禁止期間、處置內文日期比對}
+      - {tag: data-phase2-20261110c3, status: 已退回, note: Eve 2026-11-11 退回：disposal_intervals 預設聯集會把待核日期算成處置日}
   fin:
     title: 財報｜綜合損益表、資產負債表（FinMind 現行值）
     tags:

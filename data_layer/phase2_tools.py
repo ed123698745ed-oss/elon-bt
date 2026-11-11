@@ -92,11 +92,13 @@ def detail_period(text):
     return s, e
 
 
-def disposal_intervals(sv: pd.DataFrame, exclude_flags=("取消／恢復公告", "起訖同日"), max_days=None, conflict="union") -> pd.DataFrame:
+def disposal_intervals(sv: pd.DataFrame, exclude_flags=("取消／恢復公告", "起訖同日"), max_days=None, conflict="confirmed") -> pd.DataFrame:
     """把處置公告合併成每檔股票互不重疊的處置區間（含頭尾的日曆日，使用時再對交易日曆展開）。
     預設排除「取消／恢復公告」與「起訖同日」列（它們不是新的處置期間）；max_days 給數字則排除期間更長者。
     conflict：表格日期與公告內文日期不符（period_flag 含「表格與內文日期不符」）時的取法：
-      "union"（預設）＝取兩者聯集（最早起日至最晚迄日，避免提早解除或晚開始而漏掉處置）；"table"／"detail"＝只取其一；"drop"＝排除。
+      "confirmed"（預設）＝只取兩套日期都涵蓋的日子（交集），待核日期排除於正式處置區間；交集為空則整筆排除。
+      研究選項（須明確指定）："union"＝聯集（含待核日期）；"table"／"detail"＝只取其一；"drop"＝整筆排除。
+      （Eve 退回 c3：預設聯集會把 2410 2007-07-27 等待核日期算成處置日。）
     注意：取消公告對原處置迄日的影響本層不套用（官方公告內文需人工核對）。"""
     p = sv[(sv["kind"] == "處置")].dropna(subset=["start", "end"]).copy()
     for f in exclude_flags:
@@ -105,8 +107,14 @@ def disposal_intervals(sv: pd.DataFrame, exclude_flags=("取消／恢復公告",
         p = p[p["period_days"] <= max_days]
     if "detail_start" in p.columns:
         bad = p["period_flag"].str.contains("表格與內文日期不符", regex=False)
+        if conflict not in ("confirmed", "union", "table", "detail", "drop"):
+            raise ValueError(f"conflict 不支援：{conflict}")
         if conflict == "drop":
             p = p[~bad]
+        elif conflict == "confirmed":
+            p.loc[bad, "start"] = p.loc[bad, ["start", "detail_start"]].max(axis=1)
+            p.loc[bad, "end"] = p.loc[bad, ["end", "detail_end"]].min(axis=1)
+            p = p[p["start"] <= p["end"]]
         elif conflict == "detail":
             p.loc[bad, "start"], p.loc[bad, "end"] = p.loc[bad, "detail_start"], p.loc[bad, "detail_end"]
         elif conflict == "union":

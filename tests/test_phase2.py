@@ -204,9 +204,15 @@ def test_disposal_table_vs_detail_conflicts_flagged():
     assert not p.loc[~cf, "period_flag"].str.contains("表格與內文日期不符").any()
     r = p[(p["code"] == "2410") & (p["announce"] == "2007-07-27")]
     assert len(r) == 1 and "表格與內文日期不符" in r["period_flag"].iloc[0]
-    iv = disposal_intervals(sv)
-    g = iv[(iv["code"] == "2410") & (iv["start"] <= "2007-08-03") & (iv["end"] >= "2007-07-27")]
-    assert (g["end"] >= pd.Timestamp("2007-08-03")).any()
+    # 預設：待核日期排除（只取表格與內文都涵蓋的 7/30～8/02）；聯集須明確指定（Eve 退回 c3）
+    # 注意：2410 另有前一則處置 7/23～7/27，與本則無關；這裡只看包含 7/31 的區間
+    def hit(iv):
+        g = iv[(iv["code"] == "2410") & (iv["start"] <= "2007-07-31") & (iv["end"] >= "2007-07-31")]
+        assert len(g) == 1, g
+        return g["start"].iloc[0], g["end"].iloc[0]
+    assert hit(disposal_intervals(sv)) == (pd.Timestamp("2007-07-30"), pd.Timestamp("2007-08-02"))
+    assert hit(disposal_intervals(sv, conflict="union"))[1] == pd.Timestamp("2007-08-03")
+    assert hit(disposal_intervals(sv, conflict="detail")) == (pd.Timestamp("2007-07-30"), pd.Timestamp("2007-08-03"))
 
 
 
@@ -217,3 +223,20 @@ def test_full_ban_days_all_starred():
     f = d[d["ban_rule"] == "全面禁止"]
     assert len(f) > 0 and f.loc[f["sec_kind"] != "ETF", "downtick_ban_prev_limit"].all()   # 措施對象為股票與 TDR
     assert not f.loc[f["sec_kind"] == "ETF", "downtick_ban_prev_limit"].any()             # ETF 不在禁止範圍
+
+
+
+def test_disposal_intervals_conflict_modes_unit():
+    t = pd.Timestamp
+    sv = pd.DataFrame({"kind": ["處置"] * 2, "market": ["上櫃"] * 2, "code": ["2410", "9999"],
+                       "start": [t("2007-07-27"), t("2020-01-02")], "end": [t("2007-08-02"), t("2020-01-03")],
+                       "detail_start": [t("2007-07-30"), t("2020-01-06")], "detail_end": [t("2007-08-03"), t("2020-01-07")],
+                       "period_flag": ["表格與內文日期不符"] * 2})
+    sv["period_days"] = (sv["end"] - sv["start"]).dt.days + 1
+    c = disposal_intervals(sv)                                     # 預設 confirmed：無交集者整筆排除
+    assert c.values.tolist() == [["上櫃", "2410", t("2007-07-30"), t("2007-08-02")]]
+    u = disposal_intervals(sv, conflict="union")
+    assert len(u) == 2 and u.iloc[0]["start"] == t("2007-07-27")
+    assert disposal_intervals(sv, conflict="drop").empty
+    with pytest.raises(ValueError):
+        disposal_intervals(sv, conflict="xx")

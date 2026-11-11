@@ -75,7 +75,7 @@ surveillance:
   use: 處置期間、注意股事件
   key: market + kind + announce + code + start + reason
   timing: 公布日收盤後可得，最早次一交易日使用
-  caveats: 先用 sec_kind 篩證券類型；處置區間重疊請用 phase2_tools.disposal_intervals 合併；period_flag 標取消／恢復、起訖同日、期間逾 60 日、表格與內文日期不符（合併區間預設取聯集）；parse_note 標休市日等待核項目
+  caveats: 先用 sec_kind 篩證券類型；處置區間重疊請用 phase2_tools.disposal_intervals 合併；period_flag 標取消／恢復、起訖同日、期間逾 60 日、表格與內文日期不符（disposal_intervals 預設只取兩者交集、待核日期排除；聯集須指定 conflict="union"）；parse_note 標休市日等待核項目
 margin_flags:
   group: phase2
   title: 融資融券註記（停資、停券、停止買賣）
