@@ -155,11 +155,18 @@ cb_issues:
   caveats: 官方（公開資訊觀測站 t120sg01）為主，缺漏才用 Ed 種子清單（20260830）；每欄有 _src；推算值只在 _est 欄、不進主欄；conflict 列官方與種子不一致者；flags 列多世代歧義、疑年報董事會日等待核；official_status＝未下載／官方查無者主欄全為種子值；代號會回收再用，串接時須同時看發行日
 cb_conv_price:
   group: cb
-  title: 可轉債轉換價格調整紀錄
-  use: 各次轉換價調整的生效日與調整前後價格
+  title: 可轉債轉換價格調整紀錄（已歸屬）
+  use: 各次轉換價調整的生效日、申報日與調整前後價格；回測取值用 framework.cb.conv_price_asof
   key: bond_id + effective + price_before + price_after
-  timing: 以申報日（report_date_roc）收盤後可得，effective 為生效日
-  caveats: 來源為 Ed 種子清單（MOPS 轉換價格調整公告），已去重；in_issues＝False 的 31 筆代號不在主清單；發行時轉換價另見 cb_issues.conv_price_issue（官方）
+  timing: 生效日 effective ≤ 判斷日，且可得日 available_date（申報日）< 判斷日，兩者都成立才可用
+  caveats: 來源為 Ed 種子清單（MOPS 轉換價格調整公告），已去重；只收生效日落在發行日～到期（或下櫃）之間、且有申報日者；其餘在 cb_conv_price_quarantine
+cb_conv_price_quarantine:
+  group: cb
+  title: 可轉債轉換價調整（隔離，未能歸屬到某次發行）
+  use: 供複審與人工歸屬；回測不得使用
+  key: bond_id + effective + price_before + price_after
+  timing: 同 cb_conv_price
+  caveats: assign_status 註明原因（發行日未知、生效日早於發行日、生效日晚於到期或下櫃、代號不在清單、缺申報日）
 valuation_daily:
   group: pbr
   title: 官方每日個股本益比、殖利率、股價淨值比（上市＋上櫃）
