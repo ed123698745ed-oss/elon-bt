@@ -1,0 +1,516 @@
+{
+ "tag": "cb-20261112c3",
+ "manifest": "manifest.json",
+ "code_commit": "ee95c1f2d4c2bac764135260fdaa19ce66487595",
+ "tests_exit_code": 0,
+ "source_asof": null,
+ "tables": {
+  "cb_issues": {
+   "rows": 2347,
+   "size": 339517,
+   "columns": [
+    {
+     "name": "bond_id",
+     "type": "large_string"
+    },
+    {
+     "name": "name_seed",
+     "type": "large_string"
+    },
+    {
+     "name": "issuer",
+     "type": "large_string"
+    },
+    {
+     "name": "official_status",
+     "type": "large_string"
+    },
+    {
+     "name": "snapshot_month",
+     "type": "large_string"
+    },
+    {
+     "name": "issue_date",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "issue_date_src",
+     "type": "large_string"
+    },
+    {
+     "name": "maturity_date",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "maturity_date_src",
+     "type": "large_string"
+    },
+    {
+     "name": "delist_date",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "delist_date_src",
+     "type": "large_string"
+    },
+    {
+     "name": "conv_start",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "conv_start_src",
+     "type": "large_string"
+    },
+    {
+     "name": "conv_end",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "conv_end_src",
+     "type": "large_string"
+    },
+    {
+     "name": "amount_issued",
+     "type": "double"
+    },
+    {
+     "name": "amount_issued_src",
+     "type": "large_string"
+    },
+    {
+     "name": "guarantee_detail",
+     "type": "large_string"
+    },
+    {
+     "name": "guarantee",
+     "type": "large_string"
+    },
+    {
+     "name": "guarantee_src",
+     "type": "large_string"
+    },
+    {
+     "name": "coupon_rate",
+     "type": "double"
+    },
+    {
+     "name": "coupon_rate_src",
+     "type": "large_string"
+    },
+    {
+     "name": "board_date",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "board_date_src",
+     "type": "large_string"
+    },
+    {
+     "name": "pricing_date",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "pricing_date_src",
+     "type": "large_string"
+    },
+    {
+     "name": "first_put_date",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "first_put_date_src",
+     "type": "large_string"
+    },
+    {
+     "name": "effective_date_seed",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "effective_date_seed_src",
+     "type": "large_string"
+    },
+    {
+     "name": "short_name",
+     "type": "large_string"
+    },
+    {
+     "name": "apply_date",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "approve_date",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "listing_date",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "listing_status",
+     "type": "large_string"
+    },
+    {
+     "name": "tenor",
+     "type": "large_string"
+    },
+    {
+     "name": "amount_applied",
+     "type": "double"
+    },
+    {
+     "name": "face_value",
+     "type": "double"
+    },
+    {
+     "name": "units",
+     "type": "double"
+    },
+    {
+     "name": "issue_price",
+     "type": "double"
+    },
+    {
+     "name": "conv_price_issue",
+     "type": "double"
+    },
+    {
+     "name": "conv_premium",
+     "type": "double"
+    },
+    {
+     "name": "conv_price_latest",
+     "type": "double"
+    },
+    {
+     "name": "conv_price_latest_eff",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "put_terms",
+     "type": "large_string"
+    },
+    {
+     "name": "call_terms",
+     "type": "large_string"
+    },
+    {
+     "name": "underwriter",
+     "type": "large_string"
+    },
+    {
+     "name": "raise_way",
+     "type": "large_string"
+    },
+    {
+     "name": "private_board_date",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "delist_reason_seed",
+     "type": "large_string"
+    },
+    {
+     "name": "conflict",
+     "type": "large_string"
+    },
+    {
+     "name": "flags",
+     "type": "large_string"
+    },
+    {
+     "name": "identity_check",
+     "type": "large_string"
+    },
+    {
+     "name": "identity_status",
+     "type": "large_string"
+    },
+    {
+     "name": "issue_date_est",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "issue_date_est_src",
+     "type": "large_string"
+    },
+    {
+     "name": "conv_start_est",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "conv_start_est_src",
+     "type": "large_string"
+    },
+    {
+     "name": "months_tried",
+     "type": "large_string"
+    },
+    {
+     "name": "months_tried_n",
+     "type": "int64"
+    },
+    {
+     "name": "months_tried_note",
+     "type": "large_string"
+    },
+    {
+     "name": "guarantee_seed_unverified",
+     "type": "large_string"
+    },
+    {
+     "name": "board_date_seed_unverified",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "delist_date_seed_unverified",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "first_put_date_seed_unverified",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "pricing_date_seed_unverified",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "issue_date_seed_unverified",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "maturity_date_seed_unverified",
+     "type": "timestamp[us]"
+    }
+   ],
+   "ranges": {
+    "issue_date": [
+     "2002-06-25",
+     "2026-09-07"
+    ],
+    "maturity_date": [
+     "2007-06-02",
+     "2031-09-03"
+    ],
+    "delist_date": [
+     "2006-10-15",
+     "2029-07-02"
+    ],
+    "conv_start": [
+     "2002-09-25",
+     "2026-12-08"
+    ],
+    "conv_end": [
+     "2007-06-15",
+     "2031-09-03"
+    ],
+    "board_date": [
+     "2002-06-20",
+     "2026-07-01"
+    ],
+    "pricing_date": [
+     "2002-06-27",
+     "2026-07-28"
+    ],
+    "first_put_date": [
+     "2006-11-25",
+     "2029-09-03"
+    ],
+    "effective_date_seed": [
+     "2002-08-20",
+     "2026-02-03"
+    ],
+    "apply_date": [
+     "2002-05-02",
+     "2026-07-24"
+    ],
+    "approve_date": [
+     "2002-05-20",
+     "2026-08-17"
+    ],
+    "listing_date": [
+     "2002-07-02",
+     "2026-09-07"
+    ],
+    "conv_price_latest_eff": [
+     "2003-12-01",
+     "2026-10-08"
+    ],
+    "private_board_date": [
+     "2003-08-22",
+     "2005-10-12"
+    ],
+    "issue_date_est": [
+     "2003-07-29",
+     "2023-08-23"
+    ],
+    "conv_start_est": [
+     "2002-12-31",
+     "2026-06-27"
+    ],
+    "board_date_seed_unverified": [
+     "1922-03-01",
+     "2023-03-15"
+    ],
+    "delist_date_seed_unverified": [
+     "2012-07-13",
+     "2017-12-27"
+    ],
+    "first_put_date_seed_unverified": [
+     "2010-07-12",
+     "2027-08-08"
+    ],
+    "pricing_date_seed_unverified": [
+     "2003-07-10",
+     "2021-05-10"
+    ],
+    "issue_date_seed_unverified": [
+     "2014-08-27",
+     "2021-05-18"
+    ],
+    "maturity_date_seed_unverified": [
+     "2017-04-23",
+     "2026-05-18"
+    ]
+   },
+   "sha256": "50e9c84ed5b01b581354150280c2a6c3a1ffdb0a44abd3a2deb5ccefe7c4604d"
+  },
+  "cb_conv_price_quarantine": {
+   "rows": 1082,
+   "size": 49058,
+   "columns": [
+    {
+     "name": "bond_id",
+     "type": "large_string"
+    },
+    {
+     "name": "effective",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "price_before",
+     "type": "double"
+    },
+    {
+     "name": "price_after",
+     "type": "double"
+    },
+    {
+     "name": "report_date_roc",
+     "type": "large_string"
+    },
+    {
+     "name": "report_date",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "available_date",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "src",
+     "type": "large_string"
+    },
+    {
+     "name": "assign_status",
+     "type": "large_string"
+    },
+    {
+     "name": "issue_date",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "maturity_date",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "delist_date",
+     "type": "timestamp[us]"
+    }
+   ],
+   "ranges": {
+    "effective": [
+     "1925-08-02",
+     "2025-07-20"
+    ],
+    "report_date": [
+     "2006-12-14",
+     "2025-07-08"
+    ],
+    "available_date": [
+     "2006-12-14",
+     "2025-07-08"
+    ],
+    "issue_date": [
+     "2004-05-06",
+     "2024-08-08"
+    ],
+    "maturity_date": [
+     "2007-08-15",
+     "2029-08-08"
+    ],
+    "delist_date": [
+     "2006-10-15",
+     "2026-05-19"
+    ]
+   },
+   "sha256": "4a908b5a521894cda705557227e343a3fc6b97a19dceb1d197a65d9ea3b55717"
+  },
+  "cb_conv_price": {
+   "rows": 4753,
+   "size": 131268,
+   "columns": [
+    {
+     "name": "bond_id",
+     "type": "large_string"
+    },
+    {
+     "name": "effective",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "price_before",
+     "type": "double"
+    },
+    {
+     "name": "price_after",
+     "type": "double"
+    },
+    {
+     "name": "report_date_roc",
+     "type": "large_string"
+    },
+    {
+     "name": "report_date",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "available_date",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "src",
+     "type": "large_string"
+    },
+    {
+     "name": "assign_status",
+     "type": "large_string"
+    }
+   ],
+   "ranges": {
+    "effective": [
+     "2006-12-29",
+     "2026-10-08"
+    ],
+    "report_date": [
+     "2006-12-29",
+     "2026-08-31"
+    ],
+    "available_date": [
+     "2006-12-29",
+     "2026-08-31"
+    ]
+   },
+   "sha256": "d84379bc0ecb99d89e3b9bfd177d632dedac4dfcb49725a261c2b7e216da7fb8"
+  }
+ }
+}
