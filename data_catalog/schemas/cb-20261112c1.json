@@ -1,0 +1,347 @@
+{
+ "tag": "cb-20261112c1",
+ "manifest": "manifest.json",
+ "code_commit": "88e45bd8a2f95006347d5196e04501aee3f93f71",
+ "tests_exit_code": 0,
+ "source_asof": null,
+ "tables": {
+  "cb_issues": {
+   "rows": 2347,
+   "size": 319625,
+   "columns": [
+    {
+     "name": "bond_id",
+     "type": "large_string"
+    },
+    {
+     "name": "name_seed",
+     "type": "large_string"
+    },
+    {
+     "name": "issuer",
+     "type": "large_string"
+    },
+    {
+     "name": "official_status",
+     "type": "large_string"
+    },
+    {
+     "name": "snapshot_month",
+     "type": "large_string"
+    },
+    {
+     "name": "issue_date",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "issue_date_src",
+     "type": "large_string"
+    },
+    {
+     "name": "maturity_date",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "maturity_date_src",
+     "type": "large_string"
+    },
+    {
+     "name": "delist_date",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "delist_date_src",
+     "type": "large_string"
+    },
+    {
+     "name": "conv_start",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "conv_start_src",
+     "type": "large_string"
+    },
+    {
+     "name": "conv_end",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "conv_end_src",
+     "type": "large_string"
+    },
+    {
+     "name": "amount_issued",
+     "type": "double"
+    },
+    {
+     "name": "amount_issued_src",
+     "type": "large_string"
+    },
+    {
+     "name": "guarantee_detail",
+     "type": "large_string"
+    },
+    {
+     "name": "guarantee",
+     "type": "large_string"
+    },
+    {
+     "name": "guarantee_src",
+     "type": "large_string"
+    },
+    {
+     "name": "coupon_rate",
+     "type": "double"
+    },
+    {
+     "name": "coupon_rate_src",
+     "type": "large_string"
+    },
+    {
+     "name": "board_date",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "board_date_src",
+     "type": "large_string"
+    },
+    {
+     "name": "pricing_date",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "pricing_date_src",
+     "type": "large_string"
+    },
+    {
+     "name": "first_put_date",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "first_put_date_src",
+     "type": "large_string"
+    },
+    {
+     "name": "effective_date_seed",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "effective_date_seed_src",
+     "type": "large_string"
+    },
+    {
+     "name": "short_name",
+     "type": "large_string"
+    },
+    {
+     "name": "apply_date",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "approve_date",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "listing_date",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "listing_status",
+     "type": "large_string"
+    },
+    {
+     "name": "tenor",
+     "type": "large_string"
+    },
+    {
+     "name": "amount_applied",
+     "type": "double"
+    },
+    {
+     "name": "face_value",
+     "type": "double"
+    },
+    {
+     "name": "units",
+     "type": "double"
+    },
+    {
+     "name": "issue_price",
+     "type": "double"
+    },
+    {
+     "name": "conv_price_issue",
+     "type": "double"
+    },
+    {
+     "name": "conv_premium",
+     "type": "double"
+    },
+    {
+     "name": "conv_price_latest",
+     "type": "double"
+    },
+    {
+     "name": "conv_price_latest_eff",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "put_terms",
+     "type": "large_string"
+    },
+    {
+     "name": "call_terms",
+     "type": "large_string"
+    },
+    {
+     "name": "underwriter",
+     "type": "large_string"
+    },
+    {
+     "name": "raise_way",
+     "type": "large_string"
+    },
+    {
+     "name": "private_board_date",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "delist_reason_seed",
+     "type": "large_string"
+    },
+    {
+     "name": "conflict",
+     "type": "large_string"
+    },
+    {
+     "name": "flags",
+     "type": "large_string"
+    },
+    {
+     "name": "issue_date_est",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "issue_date_est_src",
+     "type": "large_string"
+    },
+    {
+     "name": "conv_start_est",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "conv_start_est_src",
+     "type": "large_string"
+    }
+   ],
+   "ranges": {
+    "issue_date": [
+     "2002-06-25",
+     "2026-09-07"
+    ],
+    "maturity_date": [
+     "2007-06-02",
+     "2031-09-03"
+    ],
+    "delist_date": [
+     "2006-10-15",
+     "2029-07-02"
+    ],
+    "conv_start": [
+     "2002-09-25",
+     "2026-12-08"
+    ],
+    "conv_end": [
+     "2007-06-15",
+     "2031-09-03"
+    ],
+    "board_date": [
+     "1922-03-01",
+     "2026-07-01"
+    ],
+    "pricing_date": [
+     "2002-06-27",
+     "2026-07-28"
+    ],
+    "first_put_date": [
+     "2006-11-25",
+     "2029-09-03"
+    ],
+    "effective_date_seed": [
+     "2002-08-20",
+     "2026-02-03"
+    ],
+    "apply_date": [
+     "2002-05-02",
+     "2026-07-24"
+    ],
+    "approve_date": [
+     "2002-05-20",
+     "2026-08-17"
+    ],
+    "listing_date": [
+     "2002-07-02",
+     "2026-09-07"
+    ],
+    "conv_price_latest_eff": [
+     "2003-12-01",
+     "2026-10-08"
+    ],
+    "private_board_date": [
+     "2003-08-22",
+     "2005-10-12"
+    ],
+    "issue_date_est": [
+     "2003-07-29",
+     "2023-08-23"
+    ],
+    "conv_start_est": [
+     "2002-12-31",
+     "2026-06-27"
+    ]
+   },
+   "sha256": "74ebf5097d71852d940454a5c5ed61a98f6f3bfe252de9d6c82588a000de45dd"
+  },
+  "cb_conv_price": {
+   "rows": 5835,
+   "size": 106524,
+   "columns": [
+    {
+     "name": "bond_id",
+     "type": "large_string"
+    },
+    {
+     "name": "effective",
+     "type": "timestamp[us]"
+    },
+    {
+     "name": "price_before",
+     "type": "double"
+    },
+    {
+     "name": "price_after",
+     "type": "double"
+    },
+    {
+     "name": "report_date_roc",
+     "type": "large_string"
+    },
+    {
+     "name": "in_issues",
+     "type": "bool"
+    },
+    {
+     "name": "src",
+     "type": "large_string"
+    }
+   ],
+   "ranges": {
+    "effective": [
+     "1925-08-02",
+     "2026-10-08"
+    ]
+   },
+   "sha256": "dd52a0ee2bf0c6fa58fb4fe3b8e3f41672907465c065fefb880c45554b2592a4"
+  }
+ }
+}
