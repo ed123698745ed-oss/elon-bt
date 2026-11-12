@@ -25,7 +25,7 @@ jobs:
         run: RAW=raw OUT=out python data_layer/build_cb.py | tee build_log.txt
       - name: tests
         run: |
-          set +e; CB_OUT=out python -m pytest -q -rA tests/test_cb.py > test_output.txt 2>&1; echo "TEST_RC=$?" >> $GITHUB_ENV; tail -3 test_output.txt
+          set +e; CB_OUT=out CB_RAW=raw python -m pytest -q -rA tests/test_cb.py > test_output.txt 2>&1; echo "TEST_RC=$?" >> $GITHUB_ENV; tail -3 test_output.txt
       - name: tests must pass
         run: if [ "$TEST_RC" != "0" ]; then cat test_output.txt | tail -30; exit 1; fi
       - name: publish

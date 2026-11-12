@@ -62,18 +62,39 @@ def main():
     dconf = pd.read_csv(os.path.join(SEED, "cb_seed_20260830_date_conflict.csv"), dtype={"代號": str})
     dconf = dconf.groupby(dconf["代號"].str.strip())["欄位"].apply(lambda s: "、".join(sorted(set(s)))).to_dict()
 
-    # 重建每檔實際查過的月份（同 fetch_cb.py 規則）
-    TRIED = {}
-    FALLBACK = [f"{y}06" for y in range(2006, 2027)]
+    # 每檔實際查過的月份：以原始日誌為準（Eve 2026-11-12 複審）。日誌「未命中」列記前三個月份與總次數 (N)；
+    # 下載程式有兩版規則（舊版：線索月份＋2006～2026 各年 6 月；c203582 起：線索月份＋線索年份前後一年的 6 月），
+    # 用兩版各自重建，只採「前三個月份與總次數都和日誌一致」的那一版；都不一致就只留次數、月份清單空白。
+    tgm = {}
     tgp = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "jobs", "cb_targets.csv")
     for tg in csv.DictReader(open(tgp, encoding="utf-8")):
-        months = [m for m in (tg.get("months") or "").split(";") if m]
+        tgm[tg["bond_id"]] = [m for m in (tg.get("months") or "").split(";") if m]
+    FALLBACK = [f"{y}06" for y in range(2006, 2027)]
+
+    def candidates(months):
+        old = months + [x for x in FALLBACK if x not in months]
         if months:
             ys = sorted(int(m[:4]) for m in months)
             fb = [f"{y}06" for y in range(max(2006, ys[0] - 1), min(2026, ys[-1] + 1) + 1)]
         else:
             fb = FALLBACK
-        TRIED[tg["bond_id"]] = months + [x for x in fb if x not in months]
+        return [old, months + [x for x in fb if x not in months]]
+
+    TRIED, TRIED_N, TRIED_NOTE = {}, {}, {}
+    if os.path.exists(os.path.join(RAW, "_attempts_cb.csv")):
+        for r in csv.DictReader(open(os.path.join(RAW, "_attempts_cb.csv"), encoding="utf-8")):
+            if r["result"] != "notfound":
+                continue
+            m = re.match(r"^(.*)\.\.\((\d+)\)$", r["monyr"])
+            if not m:
+                continue
+            head, n = [x for x in m.group(1).split(";") if x], int(m.group(2))
+            b0 = r["bond_id"]; TRIED_N[b0] = n
+            ok = [c for c in candidates(tgm.get(b0, [])) if len(c) == n and c[:len(head)] == head]
+            if ok:
+                TRIED[b0] = ok[0]; TRIED_NOTE[b0] = "依日誌次數與前三個月份核對後重建"
+            else:
+                TRIED.pop(b0, None); TRIED_NOTE[b0] = "日誌只有前三個月份與次數，月份清單無法重建"
 
     rows = []
     for sd in seed.to_dict("records"):
@@ -154,9 +175,10 @@ def main():
             for k in list(MAP) + list(SEED_ONLY):
                 if str(r.get(k + "_src") or "").startswith("種子"):
                     r[k + "_seed_unverified"] = r[k]; r[k] = None; r[k + "_src"] = None
-        if not o:
+        if not o and r["official_status"] == "已查月份未命中":
             r["months_tried"] = ";".join(TRIED.get(b, [])) or None
-            r["months_tried_n"] = len(TRIED.get(b, []))
+            r["months_tried_n"] = TRIED_N.get(b)
+            r["months_tried_note"] = TRIED_NOTE.get(b)
         rows.append(r)
     df = pd.DataFrame(rows)
     for c in df.columns:
@@ -170,6 +192,8 @@ def main():
         if df[c].dtype == object and not c.endswith(tuple(MAP)) and c not in ("conflict", "flags"):
             df[c] = df[c].where(df[c].isna(), df[c].astype(str))
     df["guarantee"] = df["guarantee"].where(df["guarantee"].isna(), df["guarantee"].astype(str))
+    if "months_tried_n" in df.columns:
+        df["months_tried_n"] = df["months_tried_n"].astype("Int64")
     # 轉換價調整生效日早於發行日：代號有跨世代紀錄，該檔清單值也不進主欄
     tr0 = pd.read_csv(os.path.join(SEED, "cb_seed_20260830_trail.csv"), dtype={"代號": str})
     tr0["bond_id"] = tr0["代號"].str.strip(); tr0["eff"] = pd.to_datetime(tr0["生效日"], errors="coerce")

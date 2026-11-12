@@ -103,3 +103,54 @@ def test_conv_price_asof_respects_available_date():
         exp = float(prior.sort_values(["effective", "available_date"]).iloc[-1]["price_after"]) if len(prior) else None
         assert p == exp, (r.bond_id, r.effective, p, exp)   # 這一筆本身不得被選到
         assert conv_price_asof(t, d, r.bond_id, r.available_date + pd.Timedelta(days=1)) is not None
+
+
+@need
+def test_asof_intraday_and_pre_issue():
+    """Eve 2026-11-12 複審：申報日當天盤中不可讀到新價；發行前不可讀到後一次發行的發行價。"""
+    import sys
+    sys.path.insert(0, ROOT)
+    from framework.cb import conv_price_asof
+    d = pd.read_parquet(os.path.join(OUT, "cb_issues.parquet"))
+    t = pd.read_parquet(os.path.join(OUT, "cb_conv_price.parquet"))
+    # 每一筆調整：申報日當天 09:00 與 13:30 都不得讀到該筆新價（除非更早已有同價的可用調整）
+    for r in t.itertuples(index=False):
+        for hh in ("09:00", "13:30"):
+            at = pd.Timestamp(f"{r.available_date.date()} {hh}")
+            p = conv_price_asof(t, d, r.bond_id, at, fallback=False)
+            prior = t[(t["bond_id"] == r.bond_id) & (t["effective"].dt.normalize() <= at.normalize()) & (t["available_date"].dt.normalize() < at.normalize())]
+            exp = float(prior.sort_values(["effective", "available_date"]).iloc[-1]["price_after"]) if len(prior) else None
+            assert p == exp, (r.bond_id, at, p, exp)
+    # 20312：2007-08-09 09:00 不得讀到 34.8
+    if (t["bond_id"] == "20312").any():
+        assert conv_price_asof(t, d, "20312", "2007-08-09 09:00") != 34.8
+    # 140201：2012-08-27（2024 年那次發行之前）必須回傳 None
+    assert conv_price_asof(t, d, "140201", "2012-08-27") is None
+    # 一般化：任何代號在發行日前一天都回傳 None
+    for r in d[d["issue_date"].notna()].head(300).itertuples(index=False):
+        assert conv_price_asof(t, d, r.bond_id, r.issue_date - pd.Timedelta(days=1)) is None
+
+
+@need
+def test_months_tried_match_log():
+    """查詢月份須與原始日誌一致（14771 記 22 次、14773 記 26 次）。"""
+    import re
+    d = pd.read_parquet(os.path.join(OUT, "cb_issues.parquet"))
+    raw = os.environ.get("CB_RAW", "raw")
+    lg = os.path.join(raw, "_attempts_cb.csv")
+    if not os.path.exists(lg):
+        pytest.skip("需要 CB_RAW 原始日誌")
+    a = pd.read_csv(lg, dtype=str)
+    nf = a[a["result"] == "notfound"].drop_duplicates("bond_id", keep="last").set_index("bond_id")["monyr"]
+    m = d[d["official_status"] == "已查月份未命中"].set_index("bond_id")
+    for b, s in nf.items():
+        if b not in m.index:
+            continue
+        n = int(re.search(r"\((\d+)\)$", s).group(1))
+        assert m.at[b, "months_tried_n"] == n, (b, m.at[b, "months_tried_n"], n)
+        if pd.notna(m.at[b, "months_tried"]):
+            lst = m.at[b, "months_tried"].split(";")
+            assert len(lst) == n and lst[:3] == [x for x in s.split("..")[0].split(";") if x][:3], b
+    for b, n in (("14771", 22), ("14773", 26)):
+        if b in m.index:
+            assert m.at[b, "months_tried_n"] == n
