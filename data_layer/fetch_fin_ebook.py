@@ -23,11 +23,11 @@ def save():
     json.dump(prog, open(PROG, "w"), ensure_ascii=False, indent=0)
 
 
-def req(url, data=None):
+def req(url, data=None, timeout=120):
     time.sleep(INTERVAL)
     body = urllib.parse.urlencode(data).encode() if data else None
     try:
-        with urllib.request.urlopen(urllib.request.Request(url, data=body), timeout=120) as r:
+        with urllib.request.urlopen(urllib.request.Request(url, data=body), timeout=timeout) as r:
             b = r.read(); st = r.status
     except Exception as e:
         W.writerow([time.strftime("%F %T"), url, json.dumps(data or {}, ensure_ascii=False), "ERR", str(e)[:200]]); LOG.flush()
@@ -118,7 +118,7 @@ def main():
         link = re.findall(rb"(?:https://doc\.twse\.com\.tw)?(/pdf/[^'\" >]+\.pdf)", b)
         if not link:
             rec["status"] = "no_link"; prog["done"][key] = rec; save(); continue
-        pdf = req("https://doc.twse.com.tw" + link[0].decode())
+        pdf = req("https://doc.twse.com.tw" + link[0].decode(), timeout=900)   # PDF 常數 MB、站方慢，120 秒常逾時
         if pdf is None: continue
         if blocked(pdf): stop("pdf", key)
         if not pdf.startswith(b"%PDF"):
