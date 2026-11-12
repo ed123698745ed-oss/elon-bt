@@ -16,7 +16,7 @@
 | tdcc | 集保戶股權分散週表（Goodinfo，053 股票池 98 檔） | 無（load 會拒絕，需 allow_candidate） | ⚪ data-tdcc-20261111（未送驗收） |
 | fincf | 現金流量表、現行產業別（FinMind 現行值；D-070-20261111-1424-1） | 無（load 會拒絕，需 allow_candidate） | ⚪ fincf-20261111（未送驗收） |
 | revinst | 月營收、三大法人買賣超（FinMind 現行值，全市場含已下市） | 無（load 會拒絕，需 allow_candidate） | ⚪ revinst-20261111（未送驗收） |
-| cb | 可轉債（含交換債）｜發行基本資料、轉換價格調整 | 無（load 會拒絕，需 allow_candidate） | ⚪ cb-20261112c3（未送驗收） |
+| cb | 可轉債（含交換債）｜發行基本資料、轉換價格調整 | 無（load 會拒絕，需 allow_candidate） | 🟡 cb-20261112c3（待複審） |
 | pbr | 估值｜官方每日本益比、殖利率、股價淨值比（證交所 BWIBBU_d、櫃買 peQryDate；D-071-20261111-2354-1） | 無（load 會拒絕，需 allow_candidate） | ⚪ pbr-20261112m（未送驗收） |
 
 ## 二、資料表一覽
@@ -46,9 +46,9 @@
 | `tdcc_dist` | 集保戶股權分散週表（8 級人數與比例） | 千張／400 張大戶持股比例與人數變化（data_layer.tdcc_dist.big_ratio／big_holders） | tdcc | — | — | 資料日期（週五為主）之後公布；保守以資料日期 + 7 日後首個交易日開盤為可用時點，由策略卡另定 |
 | `month_revenue` | 月營收（FinMind TaiwanStockMonthRevenue） | 月營收年增、月增、創新高等訊號（067 濾網⑤、068、073） | revinst ⚪ | 470,592 | 2002-02-01～2026-11-01 | date 為次月 1 日，不是公告日；法定期限為次月 10 日，保守以次月 10 日之後第一個交易日為可用時點，由策略卡另定 |
 | `institutional` | 三大法人個股買賣超（FinMind TaiwanStockInstitutionalInvestorsBuySell） | 外資、投信、自營商淨買賣超（067 濾網⑥、048、072） | revinst ⚪ | 24,030,289 | 2005-01-03～2026-11-10 | 當日盤後公布，次一交易日開盤可用 |
-| `cb_issues` | 可轉債發行基本資料（每檔一列） | 發行日、到期日、下櫃日、轉換期間、發行總額、發行時轉換價、擔保、票面利率、董事會決議日、訂價日、首次賣回日 | cb ⚪ | 2,347 |  | 各欄日期本身即事件日；董事會決議日、訂價日為種子資料，可得時點以公告日為準 |
-| `cb_conv_price` | 可轉債轉換價格調整紀錄（已歸屬） | 各次轉換價調整的生效日、申報日與調整前後價格；回測取值用 framework.cb.conv_price_asof | cb ⚪ | 4,753 |  | 生效日 effective ≤ 判斷日，且可得日 available_date（申報日）< 判斷日，兩者都成立才可用 |
-| `cb_conv_price_quarantine` | 可轉債轉換價調整（隔離，未能歸屬到某次發行） | 供複審與人工歸屬；回測不得使用 | cb ⚪ | 1,082 |  | 同 cb_conv_price |
+| `cb_issues` | 可轉債發行基本資料（每檔一列） | 發行日、到期日、下櫃日、轉換期間、發行總額、發行時轉換價、擔保、票面利率、董事會決議日、訂價日、首次賣回日 | cb 🟡 | 2,347 |  | 各欄日期本身即事件日；董事會決議日、訂價日為種子資料，可得時點以公告日為準 |
+| `cb_conv_price` | 可轉債轉換價格調整紀錄（已歸屬） | 各次轉換價調整的生效日、申報日與調整前後價格；回測取值用 framework.cb.conv_price_asof | cb 🟡 | 4,753 |  | 生效日 effective ≤ 判斷日，且可得日 available_date（申報日）< 判斷日，兩者都成立才可用 |
+| `cb_conv_price_quarantine` | 可轉債轉換價調整（隔離，未能歸屬到某次發行） | 供複審與人工歸屬；回測不得使用 | cb 🟡 | 1,082 |  | 同 cb_conv_price |
 | `valuation_daily` | 官方每日個股本益比、殖利率、股價淨值比（上市＋上櫃） | 淨值比／本益比選股（071 等）；官方每日公布值即當日可得之數字 | pbr ⚪ | 387,849 | 2005-09-30～2026-11-03 | 當日收盤後公布，次一交易日開盤可用 |
 | `valuation_coverage` | 估值表逐日覆蓋狀態 | 判斷某市場某日是有資料、官方查無，還是尚未取得 | pbr ⚪ | 10,075 | 2005-09-02～2026-11-03 | 查核用 |
 
@@ -245,7 +245,7 @@
 - 主鍵：bond_id
 - 可得時點：各欄日期本身即事件日；董事會決議日、訂價日為種子資料，可得時點以公告日為準
 - 注意：官方（公開資訊觀測站 t120sg01）為主，缺漏才用 Ed 種子清單（20260830）；每欄有 _src；推算值只在 _est 欄、不進主欄；conflict 列官方與種子不一致者；flags 列多世代歧義、疑年報董事會日等待核；official_status＝未下載／官方查無者主欄全為種子值；代號會回收再用，串接時須同時看發行日
-- ⚪ cb-20261112c3：2,347 列；期間 —
+- 🟡 cb-20261112c3：2,347 列；期間 —
 - 欄位：`bond_id`、`name_seed`、`issuer`、`official_status`、`snapshot_month`、`issue_date`、`issue_date_src`、`maturity_date`、`maturity_date_src`、`delist_date`、`delist_date_src`、`conv_start`、`conv_start_src`、`conv_end`、`conv_end_src`、`amount_issued`、`amount_issued_src`、`guarantee_detail`、`guarantee`、`guarantee_src`、`coupon_rate`、`coupon_rate_src`、`board_date`、`board_date_src`、`pricing_date`、`pricing_date_src`、`first_put_date`、`first_put_date_src`、`effective_date_seed`、`effective_date_seed_src`、`short_name`、`apply_date`、`approve_date`、`listing_date`、`listing_status`、`tenor`、`amount_applied`、`face_value`、`units`、`issue_price`、`conv_price_issue`、`conv_premium`、`conv_price_latest`、`conv_price_latest_eff`、`put_terms`、`call_terms`、`underwriter`、`raise_way`、`private_board_date`、`delist_reason_seed`、`conflict`、`flags`、`identity_check`、`identity_status`、`issue_date_est`、`issue_date_est_src`、`conv_start_est`、`conv_start_est_src`、`months_tried`、`months_tried_n`、`months_tried_note`、`guarantee_seed_unverified`、`board_date_seed_unverified`、`delist_date_seed_unverified`、`first_put_date_seed_unverified`、`pricing_date_seed_unverified`、`issue_date_seed_unverified`、`maturity_date_seed_unverified`
 
 ### `cb_conv_price`｜可轉債轉換價格調整紀錄（已歸屬）
@@ -254,7 +254,7 @@
 - 主鍵：bond_id + effective + price_before + price_after
 - 可得時點：生效日 effective ≤ 判斷日，且可得日 available_date（申報日）< 判斷日，兩者都成立才可用
 - 注意：來源為 Ed 種子清單（MOPS 轉換價格調整公告），已去重；只收生效日落在發行日～到期（或下櫃）之間、且有申報日者；其餘在 cb_conv_price_quarantine
-- ⚪ cb-20261112c3：4,753 列；期間 —
+- 🟡 cb-20261112c3：4,753 列；期間 —
 - 欄位：`bond_id`、`effective`、`price_before`、`price_after`、`report_date_roc`、`report_date`、`available_date`、`src`、`assign_status`
 
 ### `cb_conv_price_quarantine`｜可轉債轉換價調整（隔離，未能歸屬到某次發行）
@@ -263,7 +263,7 @@
 - 主鍵：bond_id + effective + price_before + price_after
 - 可得時點：同 cb_conv_price
 - 注意：assign_status 註明原因（發行日未知、生效日早於發行日、生效日晚於到期或下櫃、代號不在清單、缺申報日）
-- ⚪ cb-20261112c3：1,082 列；期間 —
+- 🟡 cb-20261112c3：1,082 列；期間 —
 - 欄位：`bond_id`、`effective`、`price_before`、`price_after`、`report_date_roc`、`report_date`、`available_date`、`src`、`assign_status`、`issue_date`、`maturity_date`、`delist_date`
 
 ### `valuation_daily`｜官方每日個股本益比、殖利率、股價淨值比（上市＋上櫃）
@@ -308,7 +308,7 @@
 | revinst | revinst-20261111 | ⚪ 未送驗收 | 月營收 2002-02～2026-11、法人 2005-01～2026-11（2012-05 前覆蓋僅約 400～680 檔）；D-067-20261111-0016-1 | cb6dbee |  |
 | cb | cb-20261112c1 | ↩️ 已退回 | 公開資訊觀測站 t120sg01 官方值優先（取得 1 | 88e45bd | 通過 |
 | cb | cb-20261112c2 | ↩️ 已退回 | 修正 c1：發行身分檢查（世代疑義 50 檔清單值移 _seed_unverified）、轉換價只收發行期間內且有申報日者（4 | 8b28e82 | 通過 |
-| cb | cb-20261112c3 | ⚪ 未送驗收 | 修正 c2：conv_price_asof 以日曆日比較申報日（當天不可用）、發行日前／到期或下櫃後回傳空值；未命中檔的查詢月份依原始日誌次數與前三個月份核對重建（629 檔全部一致）；轉換價兩表同 c2 | ee95c1f | 通過 |
+| cb | cb-20261112c3 | 🟡 待複審 | Ed 2026-11-12 16:32「對 繼續審」送 Eve 複審；修正 c2：conv_price_asof 以日曆日比較申報日（當天不可用）、發行日前／到期或下櫃後回傳空值；未命中檔的查詢月份依原始日誌次數與前三個月份核對重建（629 檔全部一致）；轉換價兩表同 c2 | ee95c1f | 通過 |
 | pbr | pbr-20261112m | ⚪ 未送驗收 | 月底交易日完整版（上市 2005-09 起 255 個月底、上櫃 2007-01 起 239 個月底）；其餘交易日下載中，valuation_coverage 標 missing；071 快篩用 | 4638307 | 通過 |
 
 原始檔倉庫（建置用，不供回測直接讀取）：
