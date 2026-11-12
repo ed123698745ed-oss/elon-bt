@@ -46,16 +46,34 @@ def stop(where, key):
     save(); print(f"站方安全頁：{where} {key}，停止本次", flush=True); sys.exit(2)
 
 
+def keep(t):
+    y = re.sub(r"\s+", "", t)
+    return "母公司業主" in y or ("歸屬於" in y and "損益" in y)
+
+
+def ocr_page(page):
+    """掃描檔（無文字層）：300 dpi 轉圖後以 tesseract（繁中＋英數）辨識。"""
+    import subprocess, tempfile
+    img = page.render(scale=300 / 72).to_pil().convert("L")
+    with tempfile.NamedTemporaryFile(suffix=".png") as f:
+        img.save(f.name)
+        r = subprocess.run(["tesseract", f.name, "-", "-l", "chi_tra+eng", "--psm", "6"],
+                           capture_output=True, text=True, timeout=180)
+    return r.stdout
+
+
 def pages_with(pdf_path):
-    """保留損益表候選頁：含「母公司業主」或「歸屬於」且含「損益」。另回傳全檔字數，判斷是否為掃描檔。"""
+    """保留損益表候選頁。有文字層就直接取；全檔沒有文字層（掃描檔）時改用 OCR，並標 ocr。"""
     import pypdfium2 as pdfium
     doc = pdfium.PdfDocument(pdf_path); out = []; chars = 0
+    texts = [doc[i].get_textpage().get_text_range() for i in range(len(doc))]
+    chars = sum(len(re.sub(r"\s+", "", t)) for t in texts)
+    ocr = chars < 200
     for i in range(len(doc)):
-        t = doc[i].get_textpage().get_text_range()
-        y = re.sub(r"\s+", "", t); chars += len(y)
-        if "母公司業主" in y or ("歸屬於" in y and "損益" in y):
-            out.append({"page": i + 1, "text": t})
-    return out, chars, len(doc)
+        t = ocr_page(doc[i]) if ocr else texts[i]
+        if keep(t):
+            out.append({"page": i + 1, "text": t, "ocr": ocr})
+    return out, chars, len(doc), ocr
 
 
 def main():
@@ -67,8 +85,8 @@ def main():
         sid, y, s = r["stock_id"], r["roc_year"], r["seamon"]
         key = f"{sid}_{y}_{s}"
         d0 = prog["done"].get(key)
-        if d0 and not (d0.get("status") == "ok" and not d0.get("pages") and d0.get("v") != 2):
-            continue   # 第一版只存含「母公司業主」頁；沒存到頁面的舊紀錄用新規則重抓一次
+        if d0 and not (d0.get("status") == "ok" and not d0.get("pages") and d0.get("v", 1) < 3):
+            continue   # 舊版沒存到頁面（含掃描檔未 OCR）的紀錄用新規則重抓一次
         if time.time() - T0 > BUDGET:
             print("時間預算用完，下次接續"); break
         b = req(f"{BASE}?step=1&colorchg=1&co_id={sid}&year={y}&seamon={s}&mtype=A")
@@ -94,8 +112,8 @@ def main():
         p = os.path.join(OUT, "tmp.pdf"); open(p, "wb").write(pdf)
         rec.update(status="ok", file=fn[0], bytes=len(pdf), sha256=hashlib.sha256(pdf).hexdigest())
         try:
-            pg, chars, npages = pages_with(p); rec["pages"] = [x["page"] for x in pg]
-            rec.update(text_chars=chars, n_pages=npages, v=2)
+            pg, chars, npages, ocr = pages_with(p); rec["pages"] = [x["page"] for x in pg]
+            rec.update(text_chars=chars, n_pages=npages, ocr=ocr, v=3)
             for x in pg:
                 pj.write(json.dumps({"key": key, "file": fn[0], **x}, ensure_ascii=False) + "\n")
             pj.flush()
@@ -105,7 +123,7 @@ def main():
         prog["done"][key] = rec; prog["blocked_runs"] = 0; save()
     def pending(k):
         d0 = prog["done"].get(k)
-        return d0 is None or (d0.get("status") == "ok" and not d0.get("pages") and d0.get("v") != 2)
+        return d0 is None or (d0.get("status") == "ok" and not d0.get("pages") and d0.get("v", 1) < 3)
     left = sum(1 for r in todo if pending(f"{r['stock_id']}_{r['roc_year']}_{r['seamon']}"))
     prog["remaining"] = left; save()
     if left == 0:

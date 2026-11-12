@@ -48,6 +48,8 @@ def block(text):
     def is_start(x):
         y = re.sub(r"\s", "", x)
         k = y.find("歸屬於")
+        if re.match(r"^8600\D", y):   # IFRS 科目代碼：8600 淨利歸屬於（OCR 文字常把中文辨識錯，代碼較穩）
+            return True
         return k > 0 and re.search(r"(淨利|淨損|損益|純益)", y[:k]) and "綜合" not in y[:k] and "權益" not in y[:k]
     for st in [i for i, x in enumerate(L) if is_start(x)]:
         r = {}
@@ -56,7 +58,13 @@ def block(text):
             if "綜合損益" in y and "歸屬" in y:
                 break
             body = strip_code(x)
-            if "母公司業主" in y:
+            if re.match(r"^87\d\d", y):
+                break
+            if re.match(r"^8610\D", y):
+                r["NI"] = nums(re.sub(r"^[^\d(\$-]*", "", body))
+            elif re.match(r"^8620\D", y):
+                r["NCI"] = nums(re.sub(r"^[^\d(\$-]*", "", body))
+            elif "母公司業主" in y:
                 r["NI"] = nums(after(body, "業主"))
             elif "非控制權益" in y:
                 r["NCI"] = nums(after(body, "權益"))

@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.11" }
-      - run: pip install pypdfium2
+      - run: sudo apt-get install -y -q tesseract-ocr tesseract-ocr-chi-tra >/dev/null && pip install pypdfium2 pillow
       - name: restore
         run: |
           gh release view raw-fin-ebook >/dev/null 2>&1 || gh release create raw-fin-ebook --prerelease --title raw-fin-ebook --notes "財報電子書頁面文字與下載進度（財報補正用）"
