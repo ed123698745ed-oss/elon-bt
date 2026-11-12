@@ -48,31 +48,45 @@ def stop(where, key):
 
 def keep(t):
     y = re.sub(r"\s+", "", t)
-    return "母公司業主" in y or ("歸屬於" in y and "損益" in y)
+    return "母公司業主" in y or ("歸屬於" in y and "損益" in y) or bool(re.search(r"86[12]0", y))
 
 
-def ocr_page(page):
-    """掃描檔（無文字層）：300 dpi 轉圖後以 tesseract（繁中＋英數）辨識。"""
-    import subprocess, tempfile
-    img = page.render(scale=300 / 72).to_pil().convert("L")
-    with tempfile.NamedTemporaryFile(suffix=".png") as f:
-        img.save(f.name)
-        r = subprocess.run(["tesseract", f.name, "-", "-l", "chi_tra+eng", "--psm", "6"],
-                           capture_output=True, text=True, timeout=180)
+def ocr_png(path):
+    import subprocess
+    r = subprocess.run(["tesseract", path, "-", "-l", "chi_tra+eng", "--psm", "6"],
+                       capture_output=True, text=True, timeout=180)
     return r.stdout
 
 
 def pages_with(pdf_path):
-    """保留損益表候選頁。有文字層就直接取；全檔沒有文字層（掃描檔）時改用 OCR，並標 ocr。"""
-    import pypdfium2 as pdfium
-    doc = pdfium.PdfDocument(pdf_path); out = []; chars = 0
+    """保留損益表候選頁。有文字層就直接取；全檔沒有文字層（掃描檔）時改用 OCR，並標 ocr。
+    掃描檔只辨識前 18 頁（財報的綜合損益表多在第 5～13 頁），4 個行程並行；前 18 頁都沒有才再辨識第 19～40 頁。"""
+    import pypdfium2 as pdfium, tempfile
+    from concurrent.futures import ThreadPoolExecutor
+    doc = pdfium.PdfDocument(pdf_path)
     texts = [doc[i].get_textpage().get_text_range() for i in range(len(doc))]
     chars = sum(len(re.sub(r"\s+", "", t)) for t in texts)
     ocr = chars < 200
-    for i in range(len(doc)):
-        t = ocr_page(doc[i]) if ocr else texts[i]
-        if keep(t):
-            out.append({"page": i + 1, "text": t, "ocr": ocr})
+    out = []
+    if not ocr:
+        out = [{"page": i + 1, "text": t, "ocr": False} for i, t in enumerate(texts) if keep(t)]
+        return out, chars, len(doc), ocr
+    tmp = tempfile.mkdtemp()
+    for lo, hi in ((0, 18), (18, 40)):
+        idx = list(range(lo, min(hi, len(doc))))
+        paths = []
+        for i in idx:
+            pth = os.path.join(tmp, f"p{i}.png")
+            doc[i].render(scale=300 / 72).to_pil().convert("L").save(pth); paths.append(pth)
+        with ThreadPoolExecutor(4) as ex:
+            res = list(ex.map(ocr_png, paths))
+        for i, t in zip(idx, res):
+            if keep(t) or re.search(r"(^|\n)\s*86[01]0\D", t):
+                out.append({"page": i + 1, "text": t, "ocr": True})
+        for pth in paths:
+            os.remove(pth)
+        if any(re.search(r"86[12]0|母\s*公\s*司\s*業\s*主", x["text"]) for x in out):
+            break
     return out, chars, len(doc), ocr
 
 

@@ -44,6 +44,7 @@ def strip_code(line):
 def block(text):
     """回傳 {'NI': [...], 'NCI': [...], 'FORM': [...], 'TOT': [...]}；找不到回傳 None。"""
     text = unicodedata.normalize("NFKC", text)   # PDF 常用相容表意字（如「權」「利」的變體），先正規化
+    text = re.sub(r"(\d),\s+(?=\d{3}(\D|$))", r"\1,", text)   # OCR 常把千分位逗號後多加空白（10, 819）
     L = [x.strip() for x in text.splitlines()]
     def is_start(x):
         y = re.sub(r"\s", "", x)
