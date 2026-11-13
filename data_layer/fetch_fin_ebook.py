@@ -99,7 +99,7 @@ def redo(d0):
     if d0.get("status") == "ok" and not d0.get("pages") and (d0.get("v", 1) < 3 or d0.get("extract_error")):
         return d0.get("tries", 1) < 3   # OCR 一再失敗者最多試 3 次，之後列資料不足
 
-    return d0.get("status") == "no_file" and bool(d0.get("upload_times")) and d0.get("v_nf", 1) < 3
+    return d0.get("status") == "no_file" and bool(d0.get("upload_times")) and d0.get("v_nf", 1) < 4
 
 
 def main():
@@ -119,14 +119,14 @@ def main():
         if b is None: continue
         if blocked(b): stop("list", key)
         t = b.decode("big5", "ignore")
-        allf = re.findall(r'readfile2\("A","%s","(\d{6}_%s_AI[123]\.(?:pdf|zip))"\)' % (sid, sid), t)
+        allf = re.findall(r'readfile2?\("A","%s","(\d{6}_%s_AI[123]\.(?:pdf|zip))"\)' % (sid, sid), t)
         fn = sorted(set(allf), key=lambda x: x[-5])[:1]
-        rec = {"tries": (d0 or {}).get("tries", 1) + 1 if d0 else 1, "key": key, "upload_times": re.findall(r"(\d{3}/\d{2}/\d{2}\s+\d{2}:\d{2}:\d{2})", t), "files": sorted(set(allf)), "v_nf": 3}
+        rec = {"tries": (d0 or {}).get("tries", 1) + 1 if d0 else 1, "key": key, "upload_times": re.findall(r"(\d{3}/\d{2}/\d{2}\s+\d{2}:\d{2}:\d{2})", t), "files": sorted(set(allf)), "v_nf": 4}
         if not fn and rec["upload_times"]:
             # 有上傳紀錄卻沒對到 AI1～3 檔名（2026-11-14 發現 2475、5305 等）：存列表頁原文，改用寬鬆檔名
             os.makedirs(os.path.join(OUT, "listpages"), exist_ok=True)
             open(os.path.join(OUT, "listpages", key + ".html"), "w").write(t)
-            loose = sorted(set(re.findall(r'readfile2?\(\s*"[A-Z]*"\s*,\s*"%s"\s*,\s*"([^"]+?\.pdf)"' % sid, t, re.I)))
+            loose = sorted(set(re.findall(r'readfile2?\(\s*"[A-Z]*"\s*,\s*"%s"\s*,\s*"([^"]+?\.(?:pdf|zip))"' % sid, t, re.I)))
             rec["files_loose"] = loose
             fn = loose[:1]
         if not fn:
