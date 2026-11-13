@@ -1,0 +1,21 @@
+name: probe-068-ebooklist
+# 068 R03（D-068-20261113-1738-2）：財報電子書清單頁格式試抓（5 頁），確認上傳時間與更正版本的呈現方式
+on:
+  workflow_dispatch:
+  push:
+    paths: ["experiments/068/R03/probe_keys.csv"]
+permissions: { contents: write }
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env: { GH_TOKEN: "${{ github.token }}" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: KEYS=experiments/068/R03/probe_keys.csv OUT=probe_068list INTERVAL=20 BUDGET_MIN=8 python experiments/068/R03/fetch_ebook_list.py || true
+      - run: |
+          tar czf probe-068list.tar.gz probe_068list
+          gh release view raw-068 >/dev/null 2>&1 || gh release create raw-068 --prerelease --title raw-068 --notes "策略068 個案原始檔（R03 財報時點核對）"
+          gh release upload raw-068 probe-068list.tar.gz --clobber
