@@ -44,7 +44,8 @@ def strip_code(line):
 def block(text):
     """回傳 {'NI': [...], 'NCI': [...], 'FORM': [...], 'TOT': [...]}；找不到回傳 None。"""
     text = unicodedata.normalize("NFKC", text)   # PDF 常用相容表意字（如「權」「利」的變體），先正規化
-    text = re.sub(r"(\d),\s+(?=\d{3}(\D|$))", r"\1,", text)   # OCR 常把千分位逗號後多加空白（10, 819）
+    text = re.sub(r"(\d)\s*,\s+(?=\d{3}(\D|$))", r"\1,", text)   # OCR 常把千分位逗號前後多加空白（10, 819／363 , 847）
+    text = re.sub(r"(\d)\s+,(?=\d{3}(\D|$))", r"\1,", text)
     L = [x.strip() for x in text.splitlines()]
     def is_start(x):
         y = re.sub(r"\s", "", x)
@@ -52,7 +53,10 @@ def block(text):
         if re.match(r"^8600\D", y):   # IFRS 科目代碼：8600 淨利歸屬於（OCR 文字常把中文辨識錯，代碼較穩）
             return True
         return k > 0 and re.search(r"(淨利|淨損|損益|純益)", y[:k]) and "綜合" not in y[:k] and "權益" not in y[:k]
-    for st in [i for i, x in enumerate(L) if is_start(x)]:
+    starts = [i for i, x in enumerate(L) if is_start(x)]
+    # OCR 把「8600 淨利歸屬於」辨識成亂碼時，以 8610 列的前一列當起點
+    starts += [i - 1 for i, x in enumerate(L) if re.match(r"^8610\D", re.sub(r"\s", "", x)) and i - 1 not in starts and i > 0]
+    for st in starts:
         r = {}
         for x in L[st + 1: st + 12]:
             y = re.sub(r"\s", "", x)
@@ -92,9 +96,13 @@ def read_report(rec):
     """回傳 {'NI': [...], 'NCI': [...], 'FORM': [...], 'TOT': [...]}（元）。PDF 文字的欄位順序不可靠，
     所以只保留數列，配對交給 match()：用 FinMind 本期淨利找合計，再找「歸母＋非控制＋前手＝合計」的唯一組合。"""
     b = block(rec["text"]); u = unit(rec["text"])
-    if b is None or u is None:
+    if b is None:
         return None
-    return {k: [x * u for x in v] for k, v in b.items()}
+    if u is None and not rec.get("ocr"):
+        return None
+    # OCR 頁常讀不出「單位：千元」：兩種單位都列為候選，由 FinMind 本期淨利核對決定（只有一種會對得上）
+    units = [u] if u is not None else [1000.0, 1.0]
+    return [{k: [x * uu for x in v] for k, v in b.items()} for uu in units]
 
 
 def match(r, target, tol_tot=1000.0, tol_sum=1500.0):
@@ -120,7 +128,8 @@ def main():
     for p in pages:
         r = read_report(p)
         if r:
-            rep.setdefault(p["key"], []).append({**r, "file": p["file"], "page": p["page"]})
+            for c in r:
+                rep.setdefault(p["key"], []).append({**c, "file": p["file"], "page": p["page"]})
     f = pd.read_parquet(os.environ["SRC"], columns=["stock_id", "date", "dataset", "type", "value"])
     s = f[(f["dataset"] == IS) & f["type"].isin(["IncomeAfterTaxes", "IncomeAfterTax"])]
     iat = s.sort_values("type", ascending=False).drop_duplicates(["stock_id", "date"]).set_index(["stock_id", "date"])["value"]
