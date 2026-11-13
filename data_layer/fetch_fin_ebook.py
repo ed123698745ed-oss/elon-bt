@@ -53,9 +53,13 @@ def keep(t):
 
 def ocr_png(path):
     import subprocess
-    r = subprocess.run(["tesseract", path, "-", "-l", "chi_tra+eng", "--psm", "6"],
-                       capture_output=True, text=True, timeout=180)
-    return r.stdout
+    env = dict(os.environ, OMP_THREAD_LIMIT="1")   # 4 頁並行時，每個 tesseract 只用 1 執行緒，避免互搶導致逾時
+    try:
+        r = subprocess.run(["tesseract", path, "-", "-l", "chi_tra+eng", "--psm", "6"],
+                           capture_output=True, text=True, timeout=600, env=env)
+        return r.stdout
+    except subprocess.TimeoutExpired:
+        return ""
 
 
 def pages_with(pdf_path):
@@ -77,7 +81,7 @@ def pages_with(pdf_path):
         paths = []
         for i in idx:
             pth = os.path.join(tmp, f"p{i}.png")
-            doc[i].render(scale=300 / 72).to_pil().convert("L").save(pth); paths.append(pth)
+            doc[i].render(scale=250 / 72).to_pil().convert("L").save(pth); paths.append(pth)
         with ThreadPoolExecutor(4) as ex:
             res = list(ex.map(ocr_png, paths))
         for i, t in zip(idx, res):
@@ -99,7 +103,7 @@ def main():
         sid, y, s = r["stock_id"], r["roc_year"], r["seamon"]
         key = f"{sid}_{y}_{s}"
         d0 = prog["done"].get(key)
-        if d0 and not (d0.get("status") == "ok" and not d0.get("pages") and d0.get("v", 1) < 3):
+        if d0 and not (d0.get("status") == "ok" and not d0.get("pages") and (d0.get("v", 1) < 3 or d0.get("extract_error"))):
             continue   # 舊版沒存到頁面（含掃描檔未 OCR）的紀錄用新規則重抓一次
         if time.time() - T0 > BUDGET:
             print("時間預算用完，下次接續"); break
@@ -126,6 +130,7 @@ def main():
         p = os.path.join(OUT, "tmp.pdf"); open(p, "wb").write(pdf)
         rec.update(status="ok", file=fn[0], bytes=len(pdf), sha256=hashlib.sha256(pdf).hexdigest())
         try:
+            rec.pop("extract_error", None)
             pg, chars, npages, ocr = pages_with(p); rec["pages"] = [x["page"] for x in pg]
             rec.update(text_chars=chars, n_pages=npages, ocr=ocr, v=3)
             for x in pg:
@@ -137,7 +142,7 @@ def main():
         prog["done"][key] = rec; prog["blocked_runs"] = 0; save()
     def pending(k):
         d0 = prog["done"].get(k)
-        return d0 is None or (d0.get("status") == "ok" and not d0.get("pages") and d0.get("v", 1) < 3)
+        return d0 is None or (d0.get("status") == "ok" and not d0.get("pages") and (d0.get("v", 1) < 3 or d0.get("extract_error")))
     left = sum(1 for r in todo if pending(f"{r['stock_id']}_{r['roc_year']}_{r['seamon']}"))
     prog["remaining"] = left; save()
     if left == 0:
