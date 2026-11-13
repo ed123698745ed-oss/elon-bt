@@ -1,0 +1,34 @@
+name: fetch-068-ebooklist
+# 068 R03（D-068-20261113-1738-2）：V-TOP10 1,167 個股季的財報電子書清單頁（只抓清單頁，不下載 PDF），取實際上傳時間與更(補)正註記。
+# 可續傳；進度與原始 HTML 存 Release raw-068（list-068.tar.gz）。完成後排程自動跳過。
+on:
+  push:
+    paths: ["experiments/068/R03/keys_vtop10.csv"]
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+permissions: { contents: write }
+concurrency: { group: fetch-068-ebooklist, cancel-in-progress: false }
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    env: { GH_TOKEN: "${{ github.token }}" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - name: restore
+        run: |
+          gh release view raw-068 >/dev/null 2>&1 || gh release create raw-068 --prerelease --title raw-068 --notes "策略068 個案原始檔（R03 財報時點核對）"
+          gh release download raw-068 -p list-068.tar.gz && tar xzf list-068.tar.gz || mkdir -p raw_068list
+          if [ -f raw_068list/_complete ]; then echo "DONE=1" >> $GITHUB_ENV; fi
+      - name: fetch
+        if: env.DONE != '1'
+        run: KEYS=experiments/068/R03/keys_vtop10.csv OUT=raw_068list INTERVAL=30 BUDGET_MIN=320 python experiments/068/R03/fetch_ebook_list.py || echo "結束碼 $?"
+      - name: save
+        if: always() && env.DONE != '1'
+        run: |
+          tar czf list-068.tar.gz raw_068list
+          sha256sum list-068.tar.gz > list-068.sha256
+          gh release upload raw-068 list-068.tar.gz list-068.sha256 raw_068list/_attempts.csv --clobber
