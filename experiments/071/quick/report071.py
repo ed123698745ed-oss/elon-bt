@@ -53,7 +53,32 @@ q = tt.set_index("combo").loc["V-QUAL"]; lq = tt.set_index("combo").loc["V-LIQ"]
 flag_q = P[(P.combo == "H1") & P["flags"].notna()].entry_date.dt.date.astype(str).tolist()
 flag_m = P[(P.combo == "V-MON") & P["flags"].notna()].entry_date.dt.date.astype(str).tolist()
 code = "".join(f"<h3>{f}</h3><pre style='font-family:Courier New;font-size:8pt'>{E(open(f).read())}</pre>"
-               for f in ["prep071.py", "sim071.py", "stats071.py", "sens071.py", "report071.py"])
+               for f in ["prep071.py", "sim071.py", "stats071.py", "sens071.py", "etest071.py", "etest_long071.py", "nav_compare071.py", "report071.py"])
+et = pd.read_pickle("etest_ten.pkl"); ed = pd.read_pickle("etest_dd.pkl"); lt = pd.read_pickle("etest_long_ten.pkl"); ld = pd.read_pickle("etest_long_dd.pkl")
+nc = pd.read_pickle("nav_compare.pkl")
+ET_H = ["組合", "平均持股", "樣本數", "平均報酬", "平均持有交易日數", "單筆資金周轉年化報酬（單利）", "勝率", "賠率 R", "凱利", "標準差", "t 值", "雙尾 p 值", "Holm p",
+        "最大回撤", "最差三次回撤平均", "最長回撤期"]
+def etrows(t, d):
+    m = t.merge(d, on="combo")
+    return [[r.combo, Ff(r.平均持股, 1), int(r.樣本數), Pc(r.平均報酬), Ff(r.平均持有交易日數, 1), Pc(r.單利年化), Pc(r.勝率), Ff(r.賠率R), Ff(r.凱利, 3),
+             Pc(r.標準差), Ff(r.t值), Gf(r.雙尾p), Gf(r._14), Pc(r.最大回撤, 1), Pc(r.最差三次回撤平均, 1),
+             f"{int(r.最長回撤期筆數)}季（{int(r.最長回撤期日曆日):,}天）"] for r in m.rename(columns={"Holm p": "_14"}).itertuples()]
+nc_rows = [[r.配置, int(r.季數), Pc(r.年化, 1), Pc(r.最大回撤季末, 1), Ff(r.年化除回撤), Pc(r.單季最大虧損, 1)] for r in nc.itertuples()]
+ETSEC = f"""<h2>討論衍生組合（E-Test，只用樣本內）</h2>
+<p>本節屬討論衍生組合，與策略卡組合分表；共用條件同上（股票池、資料、期間、進出場、成本聲明：未計入稅、交易成本、借券費與滑價）。所有 E-Test 均在看過快篩結果後提出，屬參數最佳化；本案已結案，樣本外未開，下列結果只作研究紀錄，不列候選。</p>
+<h3>E1 減少持股（D-071-20261112-1222-1；Ed 原文「持股有辦法減少嗎」）</h3>
+<p>與策略卡差別：在低淨值比 20% 名單內，依淨值比由低到高只取 N 檔（N＝10／20／30／50，事前固定），濾網為無、前 20 日均額 ≥2,000 萬、品質（官方本益比有值）、品質＋2,000 萬；空方 h＝0.3（|h30）與 h＝0（|h0，70% 做多＋30% 現金）。共 32 列，Holm 家族＝32 列（以雙尾 p 為輸入）。</p>
+{table(ET_H, etrows(et, ed))}
+<p>說明：檔數減少後平均報酬大致不變但波動放大，10 檔已不顯著；品質濾網降低波動、提高勝率；只加成交金額門檻者報酬降到 1.4%～1.9%、皆不顯著。Holm 後最小 0.49，全部不顯著。</p>
+<h3>E2 純做多 100%（D-071-20261112-1832-1；Ed 原文「純做多的版本，不要避險 年化就用做多的那份資金算」）</h3>
+<p>與策略卡差別：不放空 0050、100% 資金做多，一期報酬＝多方等權期報酬（不乘 0.7）。沿用快篩 7 種多方設定與 E1 的 16 組，共 23 列，Holm 家族＝23 列。回撤三項為等風險法（依標準差縮放部位），不代表實際資金回撤。</p>
+{table(ET_H, etrows(lt, ld))}
+<p>說明：單利年化 11%～19%；與避險版相比平均報酬與標準差同比放大，t／p 幾乎不變。Holm 後最小 0.38，全部不顯著。</p>
+<h3>E3 實際資金口徑對照：避險能否降低回撤</h3>
+<p>期報酬連乘、只看季末淨值（季中回撤看不到）；H1 系列少 2008Q4（放空腿資料層跳動旗標），避險組回撤可能偏樂觀。</p>
+{table(["配置", "季數", "年化", "最大回撤（季末）", "年化÷回撤", "單季最大虧損"], nc_rows)}
+<p>說明：空 0050 約 30% 讓年化÷回撤由 0.42（70% 做多＋現金）升到 0.58，比單純降低持股（50% 做多 0.43）有效；空方比例再提高則年化下降過快。H1 與直接做多 0050（9.8%／−18.2%）差距不大。</p>
+<p>E-Test 判斷：E1、E2 皆「不建議繼續」（多重檢定後不顯著、可執行版本年化不足）；E3 的「做多配空 0050 約 30%」列為「建議後續 E-Test」，可套用於其他已驗證的做多策略。</p>"""
 CHECK = [
     ("A1 當時上市櫃身分", "適用｜通過", "listing_periods（官方逐日市場別）判定換股日身分"),
     ("A2 固定股數加實得現金", "適用｜通過", "framework.core.trade_return；0050 分割 2025-06 在樣本外，本次未用到"),
@@ -130,11 +155,14 @@ H = f"""<html><head><meta charset="utf-8"></head><body>
 <li>原版每期平均持有約 282 檔（最少 230 檔），實單無法照做；報酬主要來自成交冷清的小型股。</li></ol>
 <h2>防錯清單逐條對照（E6）</h2>
 {table(["條目", "適用／結果", "證據"], CHECK)}
-<h2>結論</h2>
+{ETSEC}
+<h2>結案（2026-11-13 補記）</h2>
+<p>Ed 2026-11-13 17:40「同意結案」（D-071-20261113-1740-1）：快篩後結案，不做正式策略包、不送 Eve、樣本外未開。結案存檔見《071_FinLab範例-低淨值比多空對沖_結案摘要》。</p>
+<h2>結論（快篩當時）</h2>
 <p><b>建議先由 Ed 決定方向，Elon 的建議是做正式策略包、開一次樣本外</b>：組合為 H1、V-H0、V-P10、V-QUAL 與合併組（V-P10＋V-H0＋V-QUAL），其餘 6 組照卡紀律一併開樣本外列出。理由：單組 p≈0.02、方向一致，但多重檢定後不顯著，只有樣本外能回答是不是運氣；同時要有心理準備，原版持股太多、可執行版本不顯著，即使樣本外通過，可交易性仍是主要風險。若 Ed 認為可執行性不足，就直接結案。快篩結果不得作為交易依據。</p>
 <h2>附錄：程式</h2>
 <p>程式也在 GitHub elon-bt／experiments/071/quick（含切點凍結紀錄）。共用統計函式 bt_stats 1.2（sha256 e99c85e9…20ee，selftest 與技能基準案例皆通過）只註明版本，不貼本體；出表與自檢用 elon-backtest 技能 elon_tools.py；報酬與交易日曆用 elon-bt framework.core；淨值比下載與建置程式見 elon-bt data_layer/fetch_pbr.py、build_pbr.py。selfcheck（交易日曆、切點、重算一致、回撤重算）全部通過；WARN 2 項已於上文說明（期報酬前後相接、長抱持有段 |報酬|≥100%）。</p>
 {code}
 </body></html>"""
-open("071_快篩報告.html", "w", encoding="utf-8").write(H)
+open("071_快篩報告_v2.html", "w", encoding="utf-8").write(H)
 print(len(H))
