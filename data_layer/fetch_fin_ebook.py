@@ -99,7 +99,7 @@ def redo(d0):
     if d0.get("status") == "ok" and not d0.get("pages") and (d0.get("v", 1) < 3 or d0.get("extract_error")):
         return d0.get("tries", 1) < 3   # OCR 一再失敗者最多試 3 次，之後列資料不足
 
-    return d0.get("status") == "no_file" and bool(d0.get("upload_times")) and d0.get("v_nf", 1) < 2
+    return d0.get("status") == "no_file" and bool(d0.get("upload_times")) and d0.get("v_nf", 1) < 3
 
 
 def main():
@@ -119,9 +119,9 @@ def main():
         if b is None: continue
         if blocked(b): stop("list", key)
         t = b.decode("big5", "ignore")
-        allf = re.findall(r'readfile2\("A","%s","(\d{6}_%s_AI[123]\.pdf)"\)' % (sid, sid), t)
+        allf = re.findall(r'readfile2\("A","%s","(\d{6}_%s_AI[123]\.(?:pdf|zip))"\)' % (sid, sid), t)
         fn = sorted(set(allf), key=lambda x: x[-5])[:1]
-        rec = {"tries": (d0 or {}).get("tries", 1) + 1 if d0 else 1, "key": key, "upload_times": re.findall(r"(\d{3}/\d{2}/\d{2}\s+\d{2}:\d{2}:\d{2})", t), "files": sorted(set(allf)), "v_nf": 2}
+        rec = {"tries": (d0 or {}).get("tries", 1) + 1 if d0 else 1, "key": key, "upload_times": re.findall(r"(\d{3}/\d{2}/\d{2}\s+\d{2}:\d{2}:\d{2})", t), "files": sorted(set(allf)), "v_nf": 3}
         if not fn and rec["upload_times"]:
             # 有上傳紀錄卻沒對到 AI1～3 檔名（2026-11-14 發現 2475、5305 等）：存列表頁原文，改用寬鬆檔名
             os.makedirs(os.path.join(OUT, "listpages"), exist_ok=True)
@@ -134,12 +134,22 @@ def main():
         b = req(BASE, {"step": "9", "kind": "A", "co_id": sid, "filename": fn[0]})
         if b is None: continue
         if blocked(b): stop("step9", key)
-        link = re.findall(rb"(?:https://doc\.twse\.com\.tw)?(/pdf/[^'\" >]+\.pdf)", b)
+        link = re.findall(rb"(?:https://doc\.twse\.com\.tw)?(/pdf/[^'\" >]+\.(?:pdf|zip))", b)
         if not link:
             rec["status"] = "no_link"; prog["done"][key] = rec; save(); continue
         pdf = req("https://doc.twse.com.tw" + link[0].decode(), timeout=900)   # PDF 常數 MB、站方慢，120 秒常逾時
         if pdf is None: continue
         if blocked(pdf): stop("pdf", key)
+        if pdf.startswith(b"PK"):   # 102 年前後部分公司上傳 zip（內含 PDF；2475、5305）
+            import io, zipfile
+            try:
+                z = zipfile.ZipFile(io.BytesIO(pdf))
+                mem = sorted((m for m in z.infolist() if m.filename.lower().endswith(".pdf")), key=lambda m: -m.file_size)
+                if mem:
+                    rec["zip_member"] = mem[0].filename
+                    pdf = z.read(mem[0])
+            except Exception as e:
+                rec["zip_error"] = str(e)[:200]
         if not pdf.startswith(b"%PDF"):
             rec["status"] = "not_pdf"; prog["done"][key] = rec; save(); continue
         p = os.path.join(OUT, "tmp.pdf"); open(p, "wb").write(pdf)
@@ -162,6 +172,8 @@ def main():
     prog["remaining"] = left; save()
     if left == 0:
         open(os.path.join(OUT, "_complete"), "w").write(time.strftime("%F"))
+    elif os.path.exists(os.path.join(OUT, "_complete")):
+        os.remove(os.path.join(OUT, "_complete"))   # 規則更新後又有待重抓者
     print(f"完成 {len(prog['done'])}／{len(todo)}，剩 {left}")
 
 

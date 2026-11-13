@@ -7,6 +7,8 @@ on:
   schedule:
     - cron: "41 */6 * * *"
   workflow_dispatch:
+    inputs:
+      force: { description: "1＝忽略 _complete 再跑一次", required: false, default: "0" }
 permissions: { contents: write }
 concurrency: { group: fetch-fin-ebook, cancel-in-progress: false }
 jobs:
@@ -23,7 +25,7 @@ jobs:
         run: |
           gh release view raw-fin-ebook >/dev/null 2>&1 || gh release create raw-fin-ebook --prerelease --title raw-fin-ebook --notes "財報電子書頁面文字與下載進度（財報補正用）"
           gh release download raw-fin-ebook -p p-ebook.tar.gz && tar xzf p-ebook.tar.gz || mkdir -p raw_ebook
-          if [ -f raw_ebook/_complete ]; then echo "DONE=1" >> $GITHUB_ENV; fi
+          if [ -f raw_ebook/_complete ] && [ "${{ github.event.inputs.force }}" != "1" ]; then echo "DONE=1" >> $GITHUB_ENV; fi
       - name: fetch
         if: env.DONE != '1'
         run: OUT=raw_ebook INTERVAL=20 BUDGET_MIN=320 python data_layer/fetch_fin_ebook.py || echo "結束碼 $?"
