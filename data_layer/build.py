@@ -22,7 +22,7 @@ from datetime import date, datetime, timezone
 import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from framework.elon_tools import limit_prices, security_kind, next_base  # noqa: E402
+from framework.elon_tools import limit_prices, security_kind, next_base, tick_size, DOWN_35, DOWN35_PCT  # noqa: E402
 from data_layer import corp_actions  # noqa: E402
 from data_layer import market_history as mh  # noqa: E402
 from data_layer import calendar_check  # noqa: E402
@@ -227,6 +227,14 @@ def split_by_market(px: pd.DataFrame, st: pd.DataFrame, cal: pd.DataFrame):
     return main, qx.drop(columns=["mkt_off"]), seg.merge(ev[["stock_id", "start", "initial"]], on=["stock_id", "start"], how="left"), nl
 
 
+def limit_prices_ceil35(ref, date, kind):
+    """3.5% 期間舊算法（直接進位），只用來辨認櫃買行情表是否為尾數 005 進位的值。"""
+    from decimal import Decimal, ROUND_CEILING
+    r = Decimal(str(ref)); raw = r * (1 - DOWN35_PCT)
+    t = tick_size(raw, kind, date)
+    return float((raw / t).to_integral_value(rounding=ROUND_CEILING) * t)
+
+
 TPEX_STALE_DAYS = {pd.Timestamp("2008-10-13")}   # 櫃買 10-09 印出的「次日」漲跌停早於 10-12 公布的跌幅 3.5% 措施，當日改用規則
 
 
@@ -306,7 +314,13 @@ def assign_limits(px: pd.DataFrame, ex: pd.DataFrame, ca: pd.DataFrame | None) -
             elif u <= 0 or n <= 0:
                 srcs.append("缺參考價"); ups.append(None); dns.append(None); refs.append(None)
             else:
-                srcs.append("官方行情表（櫃買次日漲跌停）"); ups.append(u); dns.append(n); refs.append(None)
+                src_ = "官方行情表（櫃買次日漲跌停）"
+                if any(a <= d <= b for a, b in DOWN_35) and pc == pc and pc is not None and pc > 0:
+                    # 3.5% 期間櫃買印出的跌停以尾數 005 進位，與實際成交（如 5603 10-15 成交 8.27）不符：改用修正規則值
+                    n_new = limit_prices(pc, d, kind)[1]
+                    if abs(n - n_new) > 1e-9 and abs(n - limit_prices_ceil35(pc, d, kind)) < 1e-9:
+                        n = n_new; src_ = "官方行情表（櫃買次日漲跌停；3.5% 期間跌停尾數依實際成交修正）"
+                srcs.append(src_); ups.append(u); dns.append(n); refs.append(None)
             continue
         if inc:
             base = cb if cb == cb else None

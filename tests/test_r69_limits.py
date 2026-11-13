@@ -79,7 +79,8 @@ def test_limit_src_values_known():
     s = pd.read_parquet(os.path.join(OUT, "daily_k.parquet"), columns=["limit_src"])["limit_src"].unique()
     allowed = {"官方除權息表", "官方行情表（櫃買次日漲跌停）", "規則（官方基準價鏈）", "官方減資參考價＋規則", "規則",
                "無漲跌幅（初次掛牌前五日）", "無漲跌幅（櫃買官方）", "待查（過渡期初次掛牌前五日）",
-               "待查（前一交易日無成交，基準價未驗證）", "缺參考價", "待查（盤中價超出推算漲跌停）", "待查（開高低為0）"}
+               "待查（前一交易日無成交，基準價未驗證）", "缺參考價", "待查（盤中價超出推算漲跌停）", "待查（開高低為0）",
+               "官方行情表（櫃買次日漲跌停；3.5% 期間跌停尾數依實際成交修正）"}
     assert set(s) <= allowed, set(s) - allowed
 
 
@@ -166,3 +167,32 @@ def test_r70_zero_rows_marked_where_assigned():
     ok = d.loc[z, "limit_src"].str.startswith("待查") | (d.loc[z, "limit_src"] == "缺參考價") | d.loc[z, "limit_src"].str.startswith("無漲跌幅")
     assert ok.all()
     assert (d.loc[d["limit_src"] == "待查（開高低為0）", "price_note"].notna()).all()
+
+
+# ---------- r73：3.5% 期間跌停尾數（Ed 2026-11-13 回報 r72 有 8 列誤標跳動） ----------
+def test_down35_tail_005_rounds_down():
+    """基準價×0.965 尾數恰為 0.00005 時捨去：實際成交在這些價位（2008-10）。"""
+    assert limit_prices(40.57, "2008-10-16", "etf")[1] == 39.15   # 0050
+    assert limit_prices(8.57, "2008-10-24")[1] == 8.27              # 1324
+    assert limit_prices(2.57, "2008-10-16")[1] == 2.48              # 1435
+    assert limit_prices(4.57, "2008-10-23")[1] == 4.41              # 1454、2390
+    assert limit_prices(6.57, "2008-10-24")[1] == 6.34              # 2812
+    # 一般尾數仍向上取；3.5% 期間外不受影響
+    assert limit_prices(10.90, "2008-10-15")[1] == 10.55
+    assert limit_prices(8.57, "2008-10-27")[1] == 7.98
+
+
+@need_out
+def test_r73_down35_no_false_jump():
+    """2008-10 那 12 列（8 列原標跳動、4 列原標待查）不得再標跳動或待查。"""
+    d = pd.read_parquet(os.path.join(OUT, "daily_k.parquet"))
+    cases = [("0050", "2008-10-16"), ("1324", "2008-10-24"), ("1435", "2008-10-16"), ("1454", "2008-10-23"),
+             ("2390", "2008-10-15"), ("2812", "2008-10-24"), ("3051", "2008-10-20"), ("3051", "2008-10-22"),
+             ("1702", "2008-10-13"), ("3024", "2008-10-13"), ("5603", "2008-10-15"), ("6219", "2008-10-16")]
+    for sid, dt in cases:
+        r = d[(d["stock_id"] == sid) & (d["date"] == pd.Timestamp(dt))]
+        assert len(r) == 1, (sid, dt)
+        r = r.iloc[0]
+        assert not bool(r["jump_flag"]), (sid, dt, r["jump_reason"])
+        assert not str(r["limit_src"]).startswith("待查"), (sid, dt, r["limit_src"])
+        assert r["low"] >= r["limit_down"] - 1e-9, (sid, dt)

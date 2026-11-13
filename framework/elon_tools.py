@@ -3,7 +3,7 @@
 統計一律呼叫 Drive 上的 bt_stats 原檔；本檔不重算統計，只做資料處理、出表與自檢。
 """
 import importlib.util, math, subprocess, sys
-from decimal import Decimal, ROUND_FLOOR, ROUND_CEILING
+from decimal import Decimal, ROUND_FLOOR, ROUND_CEILING, ROUND_HALF_EVEN
 import numpy as np
 import pandas as pd
 
@@ -71,10 +71,13 @@ DOWN_35 = [(pd.Timestamp("2000-10-20"), pd.Timestamp("2000-11-07")),
            (pd.Timestamp("2008-10-13"), pd.Timestamp("2008-10-24"))]
 
 
+DOWN35_PCT = Decimal("0.035")
+
+
 def limit_pcts(date):
     d = pd.Timestamp(date)
     up = Decimal("0.07") if d < pd.Timestamp("2015-06-01") else Decimal("0.10")
-    dn = Decimal("0.035") if any(a <= d <= b for a, b in DOWN_35) else up
+    dn = DOWN35_PCT if any(a <= d <= b for a, b in DOWN_35) else up
     return up, dn
 
 
@@ -86,6 +89,11 @@ def limit_prices(ref, date, kind="stock"):
     pu, pdn = limit_pcts(date)
     r = Decimal(str(ref))
     up_raw, dn_raw = r * (1 + pu), r * (1 - pdn)
+    if pdn == DOWN35_PCT:
+        # 3.5% 期間：基準價×0.965 有五位小數，交易所實際以四位小數（餘數恰為 0.00005 時捨去）計算後再取升降單位。
+        # 證據：2008-10 有 12 列成交價恰為「尾數 005 捨去」的跌停（0050 10-16 基準 40.57 成交 39.15、1324 8.57→8.27 等），
+        # 直接進位會把這些合法成交誤判為跳動或待查（Ed 2026-11-13 回報 8 列誤標跳動）。
+        dn_raw = dn_raw.quantize(Decimal("0.0001"), rounding=ROUND_HALF_EVEN)
     tu, td = tick_size(up_raw, kind, date), tick_size(dn_raw, kind, date)
     up = (up_raw / tu).to_integral_value(rounding=ROUND_FLOOR) * tu
     dn = (dn_raw / td).to_integral_value(rounding=ROUND_CEILING) * td
