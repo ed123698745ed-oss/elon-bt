@@ -94,6 +94,14 @@ def pages_with(pdf_path):
     return out, chars, len(doc), ocr
 
 
+def redo(d0):
+    """舊版沒存到頁面（含掃描檔未 OCR）、或「有上傳紀錄卻沒對到檔名」的紀錄重抓一次。"""
+    if d0.get("status") == "ok" and not d0.get("pages") and (d0.get("v", 1) < 3 or d0.get("extract_error")):
+        return d0.get("tries", 1) < 3   # OCR 一再失敗者最多試 3 次，之後列資料不足
+
+    return d0.get("status") == "no_file" and bool(d0.get("upload_times")) and d0.get("v_nf", 1) < 2
+
+
 def main():
     if prog.get("blocked_runs", 0) >= 3:
         print("已連續被擋 3 次，停止抓取等 Ed 決定"); return
@@ -103,7 +111,7 @@ def main():
         sid, y, s = r["stock_id"], r["roc_year"], r["seamon"]
         key = f"{sid}_{y}_{s}"
         d0 = prog["done"].get(key)
-        if d0 and not (d0.get("status") == "ok" and not d0.get("pages") and (d0.get("v", 1) < 3 or d0.get("extract_error"))):
+        if d0 and not redo(d0):
             continue   # 舊版沒存到頁面（含掃描檔未 OCR）的紀錄用新規則重抓一次
         if time.time() - T0 > BUDGET:
             print("時間預算用完，下次接續"); break
@@ -113,7 +121,14 @@ def main():
         t = b.decode("big5", "ignore")
         allf = re.findall(r'readfile2\("A","%s","(\d{6}_%s_AI[123]\.pdf)"\)' % (sid, sid), t)
         fn = sorted(set(allf), key=lambda x: x[-5])[:1]
-        rec = {"key": key, "upload_times": re.findall(r"(\d{3}/\d{2}/\d{2}\s+\d{2}:\d{2}:\d{2})", t), "files": sorted(set(allf))}
+        rec = {"tries": (d0 or {}).get("tries", 1) + 1 if d0 else 1, "key": key, "upload_times": re.findall(r"(\d{3}/\d{2}/\d{2}\s+\d{2}:\d{2}:\d{2})", t), "files": sorted(set(allf)), "v_nf": 2}
+        if not fn and rec["upload_times"]:
+            # 有上傳紀錄卻沒對到 AI1～3 檔名（2026-11-14 發現 2475、5305 等）：存列表頁原文，改用寬鬆檔名
+            os.makedirs(os.path.join(OUT, "listpages"), exist_ok=True)
+            open(os.path.join(OUT, "listpages", key + ".html"), "w").write(t)
+            loose = sorted(set(re.findall(r'readfile2?\(\s*"[A-Z]*"\s*,\s*"%s"\s*,\s*"([^"]+?\.pdf)"' % sid, t, re.I)))
+            rec["files_loose"] = loose
+            fn = loose[:1]
         if not fn:
             rec["status"] = "no_file"; prog["done"][key] = rec; save(); continue
         b = req(BASE, {"step": "9", "kind": "A", "co_id": sid, "filename": fn[0]})
@@ -142,7 +157,7 @@ def main():
         prog["done"][key] = rec; prog["blocked_runs"] = 0; save()
     def pending(k):
         d0 = prog["done"].get(k)
-        return d0 is None or (d0.get("status") == "ok" and not d0.get("pages") and (d0.get("v", 1) < 3 or d0.get("extract_error")))
+        return d0 is None or redo(d0)
     left = sum(1 for r in todo if pending(f"{r['stock_id']}_{r['roc_year']}_{r['seamon']}"))
     prog["remaining"] = left; save()
     if left == 0:
