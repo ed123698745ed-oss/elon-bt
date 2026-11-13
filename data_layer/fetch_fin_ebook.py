@@ -99,7 +99,7 @@ def redo(d0):
     if d0.get("status") == "ok" and not d0.get("pages") and (d0.get("v", 1) < 3 or d0.get("extract_error")):
         return d0.get("tries", 1) < 3   # OCR 一再失敗者最多試 3 次，之後列資料不足
 
-    return d0.get("status") == "no_file" and bool(d0.get("upload_times")) and d0.get("v_nf", 1) < 4
+    return d0.get("status") in ("no_file", "no_link") and bool(d0.get("upload_times")) and d0.get("v_nf", 1) < 5
 
 
 def main():
@@ -121,7 +121,7 @@ def main():
         t = b.decode("big5", "ignore")
         allf = re.findall(r'readfile2?\("A","%s","(\d{6}_%s_AI[123]\.(?:pdf|zip))"\)' % (sid, sid), t)
         fn = sorted(set(allf), key=lambda x: x[-5])[:1]
-        rec = {"tries": (d0 or {}).get("tries", 1) + 1 if d0 else 1, "key": key, "upload_times": re.findall(r"(\d{3}/\d{2}/\d{2}\s+\d{2}:\d{2}:\d{2})", t), "files": sorted(set(allf)), "v_nf": 4}
+        rec = {"tries": (d0 or {}).get("tries", 1) + 1 if d0 else 1, "key": key, "upload_times": re.findall(r"(\d{3}/\d{2}/\d{2}\s+\d{2}:\d{2}:\d{2})", t), "files": sorted(set(allf)), "v_nf": 5}
         if not fn and rec["upload_times"]:
             # 有上傳紀錄卻沒對到 AI1～3 檔名（2026-11-14 發現 2475、5305 等）：存列表頁原文，改用寬鬆檔名
             os.makedirs(os.path.join(OUT, "listpages"), exist_ok=True)
@@ -134,12 +134,15 @@ def main():
         b = req(BASE, {"step": "9", "kind": "A", "co_id": sid, "filename": fn[0]})
         if b is None: continue
         if blocked(b): stop("step9", key)
-        link = re.findall(rb"(?:https://doc\.twse\.com\.tw)?(/pdf/[^'\" >]+\.(?:pdf|zip))", b)
-        if not link:
-            rec["status"] = "no_link"; prog["done"][key] = rec; save(); continue
-        pdf = req("https://doc.twse.com.tw" + link[0].decode(), timeout=900)   # PDF 常數 MB、站方慢，120 秒常逾時
-        if pdf is None: continue
-        if blocked(pdf): stop("pdf", key)
+        if b.startswith(b"PK") or b.startswith(b"%PDF"):
+            pdf = b   # zip 檔 step9 直接回傳檔案本身（2475 的 102、106 年）
+        else:
+            link = re.findall(rb"(?:https://doc\.twse\.com\.tw)?(/pdf/[^'\" >]+\.(?:pdf|zip))", b)
+            if not link:
+                rec["status"] = "no_link"; prog["done"][key] = rec; save(); continue
+            pdf = req("https://doc.twse.com.tw" + link[0].decode(), timeout=900)   # PDF 常數 MB、站方慢，120 秒常逾時
+            if pdf is None: continue
+            if blocked(pdf): stop("pdf", key)
         if pdf.startswith(b"PK"):   # 102 年前後部分公司上傳 zip（內含 PDF；2475、5305）
             import io, zipfile
             try:
