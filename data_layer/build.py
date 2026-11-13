@@ -235,7 +235,10 @@ def limit_prices_ceil35(ref, date, kind):
     return float((raw / t).to_integral_value(rounding=ROUND_CEILING) * t)
 
 
-TPEX_STALE_DAYS = {pd.Timestamp("2008-10-13")}   # 櫃買 10-09 印出的「次日」漲跌停早於 10-12 公布的跌幅 3.5% 措施，當日改用規則
+TPEX_STALE_DAYS = {pd.Timestamp("2008-10-13"),   # 櫃買 10-09 印出的「次日」漲跌停早於 10-12 公布的跌幅 3.5% 措施，當日改用規則
+                   # r74（067 R06 補件自查，退回-74）：當日官方「次日漲跌停」與前一交易日完全相同（前收已變者 469/469、585/586），
+                   # 櫃買表過期一天；改走官方基準價鏈＋規則。偵測見 tests/test_r69_limits.py::test_r74_no_stale_tpex_day
+                   pd.Timestamp("2008-06-10"), pd.Timestamp("2015-11-24")}
 
 
 def assign_limits(px: pd.DataFrame, ex: pd.DataFrame, ca: pd.DataFrame | None) -> pd.DataFrame:

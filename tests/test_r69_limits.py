@@ -196,3 +196,25 @@ def test_r73_down35_no_false_jump():
         assert not bool(r["jump_flag"]), (sid, dt, r["jump_reason"])
         assert not str(r["limit_src"]).startswith("待查"), (sid, dt, r["limit_src"])
         assert r["low"] >= r["limit_down"] - 1e-9, (sid, dt)
+
+
+@need_out
+def test_r74_no_stale_tpex_day():
+    """櫃買官方次日漲跌停不得有「整日沿用前一交易日值」：前收已變卻漲跌停完全相同的比例，任一日 ≤ 20%（正常日 < 4%）。"""
+    d = pd.read_parquet(os.path.join(OUT, "daily_k.parquet"), columns=["date", "stock_id", "prev_close", "limit_up", "limit_down", "limit_src"])
+    d = d.sort_values(["stock_id", "date"])
+    g = d.groupby("stock_id")
+    d["pu"], d["pdn"], d["ppc"] = g.limit_up.shift(), g.limit_down.shift(), g.prev_close.shift()
+    o = d[(d["limit_src"] == "官方行情表（櫃買次日漲跌停）") & d["pu"].notna()]
+    chg = (o["prev_close"] != o["ppc"]) & o["prev_close"].notna() & o["ppc"].notna()
+    stale = chg & (o["limit_up"] == o["pu"]) & (o["limit_down"] == o["pdn"])
+    r = stale.groupby(o["date"]).sum() / chg.groupby(o["date"]).sum().clip(lower=1)
+    assert r.max() <= 0.2, r.sort_values().tail(5).to_dict()
+
+
+@need_out
+def test_r74_8096_20151124():
+    """8096 2015-11-24：前收 26.15 → 跌停 23.55（r72 沿用前一日 26.15，開盤 23.65 被誤判開盤跌停並標跳動）。"""
+    d = pd.read_parquet(os.path.join(OUT, "daily_k.parquet"))
+    r = d[(d["stock_id"] == "8096") & (d["date"] == pd.Timestamp("2015-11-24"))].iloc[0]
+    assert abs(r["limit_down"] - 23.55) < 1e-9 and not bool(r["jump_flag"]), (r["limit_down"], r["limit_src"], r["jump_flag"])
