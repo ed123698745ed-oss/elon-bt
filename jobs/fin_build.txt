@@ -1,0 +1,1 @@
+tag=fin-20261114r2 base=fin-20261107 ebook_complete=2026-11-14
