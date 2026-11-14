@@ -28,6 +28,7 @@ groups:
     title: 財報｜綜合損益表、資產負債表（FinMind 現行值）
     tags:
       - {tag: fin-20261107, status: 已退回, note: "Eve 2026-11-11 退回：損益表 EquityAttributableToOwnersOfParent 混入歸母綜合損益（736 筆、49 檔），見 Eve_fin-20261107_20261111.md"}
+      - {tag: fin-20261114r2, status: 未送驗收, commit: 34a13ee, tests: 通過, note: "補正 Eve 退回 fin-20261107：依原始科目名稱重新對應（歸母／非控制綜合損益 736／932 筆、OCI→綜合損益總額 740、營業收入淨額→Revenue 1,042、本期損益→IncomeAfterTaxes 295）；歸母淨利 736 股季：恆等式 363、財報電子書 134、資料不足 239（空值不推估）；電子書抽核 11 點差 0；EPS 僅基本每股盈餘"}
   tdcc:
     title: 集保戶股權分散週表（Goodinfo，053 股票池 98 檔）
     tags:
