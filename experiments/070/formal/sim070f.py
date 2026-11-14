@@ -163,8 +163,8 @@ def finalize(rows):
         a, b = r["entry_i"], r["exit_i"]
         if r.get("bad_exit"):
             rec["excluded_reason"] = r["bad_exit"]
-        elif M["JUMP"][a + 1:b + 1, j].any():
-            rec["excluded_reason"] = "持有期間有異常跳動（超出漲跌停且查無公司行動），列未完成"
+        elif M["JUMP"][a:b + 1, j].any():
+            rec["excluded_reason"] = "持有期間（進場～出場含首尾）有異常跳動（超出漲跌停且查無公司行動），列未完成"
         else:
             al = acts(j)
             bad = [x for x in al if "資料不足" in x.kind and ent.date() < x.ex_date <= ex.date()]

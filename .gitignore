@@ -4,3 +4,8 @@ __pycache__/
 raw/
 out/
 .env
+experiments/070/formal/deliver/
+experiments/070/formal/ziptmp/
+experiments/070/formal/*.log
+experiments/070/formal/*.html
+experiments/070/formal/deliver_par_note.csv

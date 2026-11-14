@@ -2,9 +2,9 @@
 輸出 mats070.npz（日期×股票矩陣）與 meta070.pkl。
 
 資料（elon-bt 共用資料層）：
-  data-20261110r72（已驗收；開工時最新驗收標籤，取代 r68）daily_k、calendar、listing_periods、corp_actions
+  data-20261110r72（已驗收；正式策略包開工時 2026-11-12 的預設驗收標籤；之後 r73 驗收，依手冊不追溯）daily_k、calendar、listing_periods、corp_actions
   data-phase2-20261111c5（已驗收）fulldelivery（上市 2004-12-24 起、上櫃 2008-04-09 起）
-  fin-20261107（未送驗收）financials（FinMind 現行值，時點未驗證）
+  fin-20261114r2（未送驗收）financials（FinMind 現行值，時點未驗證）
   fincf-20261111（未送驗收）cashflow（同上）、industry（現行產業別）
   revinst-20261111（未送驗收）month_revenue（同上）
 決策：D-070-20261104-1938-1、1947-1；D-070-20261111-1014-1～4、1424-1。
@@ -12,16 +12,18 @@
 import os, sys, pickle
 import numpy as np, pandas as pd
 sys.path.insert(0, "/home/claude/elon-bt")
+# 資料標籤在載入處顯式指定（手冊 V32 第 4 節第 3 點：進行中案件沿用開工時標籤；防錯 E7）
+P1, P2, FIN, FINCF, REVI = "data-20261110r72", "data-phase2-20261111c5", "fin-20261114r2", "fincf-20261111", "revinst-20261111"
 from framework.data import load, data_tags_used
 sys.path.insert(0, "."); from elon_tools import limit_prices
 
 IS_END = pd.Timestamp(os.environ.get("END", "2026-11-10"))   # 全期資料終點（變數名沿用快篩）
-cal = load("calendar")
+cal = load("calendar", tag=P1)
 dates = pd.DatetimeIndex(sorted(pd.to_datetime(cal["date"]).unique()))
 dates = dates[dates <= IS_END]
 T = len(dates)
 
-k = load("daily_k", columns=["date", "stock_id", "open", "high", "low", "close", "volume", "amount",
+k = load("daily_k", tag=P1, columns=["date", "stock_id", "open", "high", "low", "close", "volume", "amount",
                              "no_trade", "prev_close", "ref_price", "limit_src", "limit_up", "limit_down", "jump_flag"])
 k = k[(k["date"] <= IS_END) & (k["date"] >= "2012-01-01")]
 sid = k["stock_id"]
@@ -52,7 +54,7 @@ nolim = np.zeros((T, N), bool); nolim[r, c] = ls.str.startswith("無漲跌幅").
 JUMP = np.zeros((T, N), bool); JUMP[r, c] = k["jump_flag"].fillna(False).to_numpy().astype(bool)
 PC, REF = mat("prev_close"), mat("ref_price")
 # r68 減資／面額變更恢復買賣日 ref_price 仍為停止買賣前收盤（退回-69④，r72 才修正）：比照 068 以 corp_actions 修正當日漲跌停
-ca0 = load("corp_actions")
+ca0 = load("corp_actions", tag=P1)
 ca0 = ca0[ca0["stock_id"].isin(stocks)].copy()
 ca0["date"] = pd.to_datetime(ca0["ex_date"])
 ca0 = ca0[ca0["date"].isin(dates)]
@@ -80,7 +82,7 @@ f = np.where(np.isfinite(REF) & np.isfinite(PC) & (PC > 0) & (np.abs(REF - PC) >
 F = np.cumprod(f, axis=0)
 
 # 掛牌（官方逐日市場別區段）
-lp = load("listing_periods")
+lp = load("listing_periods", tag=P1)
 lp = lp[lp["market"].isin(["上市", "上櫃"]) & lp["stock_id"].isin(stocks)]
 listed = np.zeros((T, N), bool)
 for row in lp.itertuples():
@@ -89,7 +91,7 @@ for row in lp.itertuples():
         listed[a:b, si[row.stock_id]] = True
 
 # 變更交易（全額交割）／管理股票：上市＋上櫃（c5）
-fd = load("fulldelivery")
+fd = load("fulldelivery", tag=P2)
 FD_START = fd.groupby("market")["date"].min().astype(str).to_dict()
 fd = fd[fd["code"].isin(stocks)].copy()
 fd["date"] = pd.to_datetime(fd["date"])
@@ -98,7 +100,7 @@ FULLD = np.zeros((T, N), bool)
 FULLD[di[fd["date"]].to_numpy(), si[fd["code"]].to_numpy()] = True
 
 # 金融保險業（現行產業別）；查無產業別（多為已下市）＝未知
-ind = load("industry", allow_candidate=True).set_index("stock_id").reindex(stocks)
+ind = load("industry", allow_candidate=True, tag=FINCF).set_index("stock_id").reindex(stocks)
 FINANCIAL = ind["is_financial"].fillna(False).to_numpy(bool)
 IND_UNKNOWN = ind["is_financial"].isna().to_numpy()
 
@@ -136,7 +138,7 @@ Q = len(QEND)
 if os.environ.get("DRYRUN_FIN"):      # 只供程式流程測試（已退回資料），產出不得使用
     fin = pd.read_parquet(os.environ["DRYRUN_FIN"], columns=["stock_id", "date", "dataset", "type", "value"])
 else:
-    fin = load("financials", allow_candidate=True, columns=["stock_id", "date", "dataset", "type", "value"])
+    fin = load("financials", allow_candidate=True, tag=FIN, columns=["stock_id", "date", "dataset", "type", "value"])
 fin = fin[(fin["date"] >= "2012-03-31") & (fin["date"] <= "2026-09-30") & fin["stock_id"].isin(stocks)]
 fin = fin[fin["type"].isin(["IncomeFromContinuingOperations", "OperatingIncome", "Equity", "OrdinaryShare"])]
 # 欄位取用：繼續營業單位淨利、營業利益、權益總額、普通股股本；不使用 Eve 退回項（損益表 EquityAttributableToOwnersOfParent）
@@ -156,7 +158,7 @@ OI = qmat(fin, "OperatingIncome")
 EQ = qmat(fin, "Equity")                           # 權益總額
 OS = qmat(fin, "OrdinaryShare")                    # 普通股股本（元）
 
-cf = load("cashflow", allow_candidate=True, columns=["stock_id", "date", "type", "value"])
+cf = load("cashflow", allow_candidate=True, tag=FINCF, columns=["stock_id", "date", "type", "value"])
 cf = cf[(cf["date"] >= "2012-03-31") & (cf["date"] <= "2026-09-30") & cf["stock_id"].isin(stocks)]
 cf["date"] = pd.to_datetime(cf["date"])
 OPC = qmat(cf, "CashFlowsFromOperatingActivities")   # 年內累計
@@ -206,11 +208,11 @@ for x in json.load(open("raw_par/twse_t187ap03_L.json", encoding="utf-8")):
     PAR_NOW[str(x["公司代號"]).strip()] = (_par(x["普通股每股面額"]), x["普通股每股面額"])
 for x in json.load(open("raw_par/tpex_t187ap03_O.json", encoding="utf-8")):
     PAR_NOW[str(x["SecuritiesCompanyCode"]).strip()] = (_par(x["ParValueOfCommonStock"]), x["ParValueOfCommonStock"])
-pchg = ca0_all = load("corp_actions")
+pchg = ca0_all = load("corp_actions", tag=P1)
 pchg = pchg[pchg["kind"].str.contains("面額變更")].copy()
 pchg["d"] = pd.to_datetime(pchg["ex_date"])
 PCHG = pchg.groupby("stock_id")["d"].apply(lambda x: sorted(x)).to_dict()
-first_list = load("listing_periods").groupby("stock_id")["start"].min()
+first_list = load("listing_periods", tag=P1).groupby("stock_id")["start"].min()
 PAR_Q = np.full((Q, N), np.nan)              # 財報期末日適用面額；NaN＝資料不足
 PAR_NOTE = {}
 for j, s in enumerate(stocks):
@@ -241,7 +243,7 @@ for j, s in enumerate(stocks):
 PAR_BAD_LIST = [s for s in PAR_NOTE if np.isnan(PAR_Q[:, list(stocks).index(s)]).any()]
 
 # ---------- 月營收 ----------
-mr = load("month_revenue", allow_candidate=True)
+mr = load("month_revenue", allow_candidate=True, tag=REVI)
 mr = mr[mr["stock_id"].isin(stocks)].drop_duplicates(["stock_id", "revenue_year", "revenue_month"], keep="last")
 months = pd.period_range("2012-01", "2026-10", freq="M")
 mpos = {(p.year, p.month): n for n, p in enumerate(months)}
@@ -284,7 +286,7 @@ for a in q_avail:
     if a < T - 1:
         q_rebal[a] = True
 
-ca = load("corp_actions")
+ca = load("corp_actions", tag=P1)
 ca = ca[ca["stock_id"].isin(stocks)].copy()
 
 np.savez_compressed("mats070.npz", F=F, present=present, O=O, C=C, CT=CT, notrade=notrade, LU=LU, LD=LD, badlim=badlim,
